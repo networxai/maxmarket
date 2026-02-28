@@ -1,0 +1,458 @@
+{
+  "_meta": {
+    "version": "1.0",
+    "description": "MaxMarket RBAC permission map. Server-side enforcement only. true = allowed, false = denied, 'scoped' = allowed with ownership/assignment filter applied in service layer.",
+    "roles": ["super_admin", "admin", "manager", "agent", "client", "public"]
+  },
+
+  "auth": {
+    "login": {
+      "public": true,
+      "super_admin": true,
+      "admin": true,
+      "manager": true,
+      "agent": true,
+      "client": true
+    },
+    "refresh": {
+      "public": true,
+      "super_admin": true,
+      "admin": true,
+      "manager": true,
+      "agent": true,
+      "client": true
+    },
+    "logout": {
+      "public": false,
+      "super_admin": true,
+      "admin": true,
+      "manager": true,
+      "agent": true,
+      "client": true
+    }
+  },
+
+  "users": {
+    "list_all": {
+      "public": false,
+      "super_admin": true,
+      "admin": true,
+      "manager": false,
+      "agent": false,
+      "client": false
+    },
+    "create": {
+      "public": false,
+      "super_admin": true,
+      "admin": false,
+      "manager": false,
+      "agent": false,
+      "client": false
+    },
+    "read_any": {
+      "public": false,
+      "super_admin": true,
+      "admin": true,
+      "manager": false,
+      "agent": false,
+      "client": false
+    },
+    "read_own": {
+      "public": false,
+      "super_admin": true,
+      "admin": true,
+      "manager": true,
+      "agent": true,
+      "client": true
+    },
+    "edit_any": {
+      "public": false,
+      "super_admin": true,
+      "admin": false,
+      "manager": false,
+      "agent": false,
+      "client": false
+    },
+    "edit_own_profile": {
+      "_fields": ["fullName", "preferredLanguage"],
+      "public": false,
+      "super_admin": true,
+      "admin": true,
+      "manager": true,
+      "agent": true,
+      "client": true
+    },
+    "assign_role": {
+      "public": false,
+      "super_admin": true,
+      "admin": false,
+      "manager": false,
+      "agent": false,
+      "client": false
+    },
+    "deactivate": {
+      "public": false,
+      "super_admin": true,
+      "admin": false,
+      "manager": false,
+      "agent": false,
+      "client": false
+    },
+    "assign_client_to_agent": {
+      "public": false,
+      "super_admin": true,
+      "admin": true,
+      "manager": false,
+      "agent": false,
+      "client": false
+    },
+    "view_agent_clients": {
+      "public": false,
+      "super_admin": true,
+      "admin": true,
+      "manager": true,
+      "agent": "scoped_own_assignments",
+      "client": false,
+      "_notes": {
+        "agent": "Agent may only view their own assigned clients"
+      }
+    }
+  },
+
+  "client_groups": {
+    "list": {
+      "public": false,
+      "super_admin": true,
+      "admin": true,
+      "manager": true,
+      "agent": true,
+      "client": false
+    },
+    "create": {
+      "public": false,
+      "super_admin": true,
+      "admin": true,
+      "manager": false,
+      "agent": false,
+      "client": false
+    },
+    "update": {
+      "public": false,
+      "super_admin": true,
+      "admin": true,
+      "manager": false,
+      "agent": false,
+      "client": false
+    },
+    "delete": {
+      "public": false,
+      "super_admin": true,
+      "admin": true,
+      "manager": false,
+      "agent": false,
+      "client": false
+    }
+  },
+
+  "catalog": {
+    "browse_no_price": {
+      "public": true,
+      "super_admin": true,
+      "admin": true,
+      "manager": true,
+      "agent": true,
+      "client": true
+    },
+    "view_client_price": {
+      "public": false,
+      "super_admin": true,
+      "admin": true,
+      "manager": true,
+      "agent": true,
+      "client": "own_group_only",
+      "_notes": {
+        "client": "Only sees price for their own client group"
+      }
+    },
+    "view_cost_price": {
+      "public": false,
+      "super_admin": true,
+      "admin": true,
+      "manager": true,
+      "agent": true,
+      "client": false
+    },
+    "create_product": {
+      "public": false,
+      "super_admin": true,
+      "admin": true,
+      "manager": false,
+      "agent": false,
+      "client": false
+    },
+    "edit_product": {
+      "public": false,
+      "super_admin": true,
+      "admin": true,
+      "manager": false,
+      "agent": false,
+      "client": false
+    },
+    "soft_delete_product": {
+      "public": false,
+      "super_admin": true,
+      "admin": true,
+      "manager": false,
+      "agent": false,
+      "client": false
+    },
+    "manage_categories": {
+      "public": false,
+      "super_admin": true,
+      "admin": true,
+      "manager": false,
+      "agent": false,
+      "client": false
+    }
+  },
+
+  "inventory": {
+    "view_stock": {
+      "public": false,
+      "super_admin": true,
+      "admin": true,
+      "manager": true,
+      "agent": true,
+      "client": false
+    },
+    "adjust_stock": {
+      "public": false,
+      "super_admin": true,
+      "admin": true,
+      "manager": false,
+      "agent": false,
+      "client": false
+    }
+  },
+
+  "orders": {
+    "list": {
+      "public": false,
+      "super_admin": true,
+      "admin": true,
+      "manager": true,
+      "agent": "scoped_own_orders",
+      "client": "scoped_own_orders",
+      "_notes": {
+        "agent": "Only orders they created",
+        "client": "Only orders for themselves"
+      }
+    },
+    "read": {
+      "public": false,
+      "super_admin": true,
+      "admin": true,
+      "manager": true,
+      "agent": "scoped_own_orders",
+      "client": "scoped_own_orders"
+    },
+    "create_draft": {
+      "public": false,
+      "super_admin": false,
+      "admin": false,
+      "manager": false,
+      "agent": true,
+      "client": false,
+      "_notes": {
+        "agent": "Only for assigned clients"
+      }
+    },
+    "edit_draft": {
+      "public": false,
+      "super_admin": false,
+      "admin": false,
+      "manager": false,
+      "agent": "scoped_own_drafts",
+      "client": false
+    },
+    "delete_draft": {
+      "public": false,
+      "super_admin": false,
+      "admin": false,
+      "manager": false,
+      "agent": "scoped_own_drafts",
+      "client": false
+    },
+    "submit": {
+      "public": false,
+      "super_admin": false,
+      "admin": false,
+      "manager": false,
+      "agent": "scoped_own_drafts",
+      "client": false
+    },
+    "approve": {
+      "public": false,
+      "super_admin": false,
+      "admin": false,
+      "manager": true,
+      "agent": false,
+      "client": false
+    },
+    "reject": {
+      "public": false,
+      "super_admin": false,
+      "admin": false,
+      "manager": true,
+      "agent": false,
+      "client": false
+    },
+    "override_line_price": {
+      "public": false,
+      "super_admin": false,
+      "admin": false,
+      "manager": true,
+      "agent": false,
+      "client": false,
+      "_notes": {
+        "manager": "Only when order status = submitted"
+      }
+    },
+    "fulfill": {
+      "public": false,
+      "super_admin": false,
+      "admin": false,
+      "manager": true,
+      "agent": false,
+      "client": false
+    },
+    "cancel": {
+      "public": false,
+      "super_admin": true,
+      "admin": true,
+      "manager": true,
+      "agent": false,
+      "client": false,
+      "_notes": {
+        "all": "Only Approved orders can be cancelled (DN-ORD-02)"
+      }
+    },
+    "return": {
+      "public": false,
+      "super_admin": true,
+      "admin": true,
+      "manager": true,
+      "agent": false,
+      "client": false,
+      "_notes": {
+        "all": "Only Fulfilled orders can be returned"
+      }
+    },
+    "edit_approved_create_version": {
+      "public": false,
+      "super_admin": true,
+      "admin": true,
+      "manager": false,
+      "agent": false,
+      "client": false
+    },
+    "view_versions": {
+      "public": false,
+      "super_admin": true,
+      "admin": true,
+      "manager": true,
+      "agent": false,
+      "client": false
+    }
+  },
+
+  "reports": {
+    "sales_by_date": {
+      "public": false,
+      "super_admin": true,
+      "admin": true,
+      "manager": true,
+      "agent": "scoped_assigned_clients",
+      "client": false
+    },
+    "sales_by_manager": {
+      "public": false,
+      "super_admin": true,
+      "admin": true,
+      "manager": true,
+      "agent": false,
+      "client": false
+    },
+    "sales_by_client": {
+      "public": false,
+      "super_admin": true,
+      "admin": true,
+      "manager": true,
+      "agent": "scoped_assigned_clients",
+      "client": false
+    },
+    "sales_by_product": {
+      "public": false,
+      "super_admin": true,
+      "admin": true,
+      "manager": true,
+      "agent": "scoped_assigned_clients",
+      "client": false
+    },
+    "export": {
+      "public": false,
+      "super_admin": true,
+      "admin": true,
+      "manager": true,
+      "agent": "scoped_assigned_clients",
+      "client": false
+    }
+  },
+
+  "audit": {
+    "view_logs": {
+      "public": false,
+      "super_admin": true,
+      "admin": true,
+      "manager": false,
+      "agent": false,
+      "client": false
+    },
+    "clear_logs": {
+      "public": false,
+      "super_admin": true,
+      "admin": false,
+      "manager": false,
+      "agent": false,
+      "client": false
+    }
+  },
+
+  "i18n": {
+    "read_ui_strings": {
+      "public": true,
+      "super_admin": true,
+      "admin": true,
+      "manager": true,
+      "agent": true,
+      "client": true
+    },
+    "manage_ui_strings": {
+      "public": false,
+      "super_admin": true,
+      "admin": false,
+      "manager": false,
+      "agent": false,
+      "client": false
+    }
+  },
+
+  "scoped_values": {
+    "_description": "Scoped values require additional service-layer checks beyond role",
+    "scoped_own_orders": "Filter: WHERE agent_id = req.user.id (for agents) OR client_id = req.user.id (for clients)",
+    "scoped_own_drafts": "Filter: WHERE agent_id = req.user.id AND status = 'draft'",
+    "scoped_assigned_clients": "Filter: JOIN agent_client_assignments WHERE agent_id = req.user.id",
+    "own_group_only": "Pricing: apply client_group_id from JWT, return only that group's price",
+    "scoped_own_assignments": "Filter: WHERE agent_id = req.user.id on agent_client_assignments"
+  }
+}

@@ -1,0 +1,283 @@
+// MaxMarket DB — matches docs/08_DB_SCHEMA.md
+// Conventions: UUID PKs, snake_case in DB (map via @map)
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  schemas  = ["public", "audit"]
+}
+
+// ─── Client Groups (no FK to users) ───────────────────────────────────────────
+model ClientGroup {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name           String    @unique @db.VarChar(255)
+  discountType   String    @map("discount_type") @db.VarChar(20)
+  discountValue  Decimal   @default(0) @map("discount_value") @db.Decimal(10, 4)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt      DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  users           User[]
+
+  @@schema("public")
+  @@map("client_groups")
+}
+
+// ─── Users & Auth ─────────────────────────────────────────────────────────────
+model User {
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email              String    @unique @db.VarChar(255)
+  passwordHash       String    @map("password_hash") @db.VarChar(255)
+  fullName           String    @map("full_name") @db.VarChar(255)
+  role               String    @db.VarChar(50)
+  preferredLanguage  String    @default("en") @map("preferred_language") @db.VarChar(5)
+  clientGroupId      String?   @map("client_group_id") @db.Uuid
+  isActive           Boolean   @default(true) @map("is_active")
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt          DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  clientGroup         ClientGroup? @relation(fields: [clientGroupId], references: [id], onDelete: SetNull)
+  refreshTokens        RefreshToken[]
+  agentAssignments     AgentClientAssignment[] @relation("AgentAssignments")
+  clientAssignments    AgentClientAssignment[] @relation("ClientAssignments")
+  ordersAsClient       Order[]                 @relation("OrderClient")
+  ordersAsAgent        Order[]                 @relation("OrderAgent")
+  orderVersionsCreated OrderVersion[]
+
+  @@schema("public")
+  @@map("users")
+}
+
+model RefreshToken {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  tokenHash  String    @unique @map("token_hash") @db.VarChar(255)
+  expiresAt  DateTime  @map("expires_at") @db.Timestamptz(6)
+  usedAt     DateTime? @map("used_at") @db.Timestamptz(6)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@schema("public")
+  @@map("refresh_tokens")
+}
+
+model AgentClientAssignment {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  agentId   String   @map("agent_id") @db.Uuid
+  clientId  String   @map("client_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  agent  User @relation("AgentAssignments", fields: [agentId], references: [id], onDelete: Cascade)
+  client User @relation("ClientAssignments", fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, clientId])
+  @@schema("public")
+  @@map("agent_client_assignments")
+}
+
+// ─── Catalog ─────────────────────────────────────────────────────────────────
+model Category {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name      Json      @default("{}") @db.JsonB
+  parentId  String?   @map("parent_id") @db.Uuid
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  parent   Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children Category[] @relation("CategoryHierarchy")
+  products Product[]
+
+  @@schema("public")
+  @@map("categories")
+}
+
+model Product {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  categoryId  String?  @map("category_id") @db.Uuid
+  name        Json     @default("{}") @db.JsonB
+  description Json     @default("{}") @db.JsonB
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  category Category?         @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  variants ProductVariant[]
+
+  @@schema("public")
+  @@map("products")
+}
+
+model ProductVariant {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  productId     String    @map("product_id") @db.Uuid
+  sku           String    @unique @db.VarChar(100)
+  unitType      String    @map("unit_type") @db.VarChar(20)
+  minOrderQty   Int       @default(1) @map("min_order_qty")
+  costPrice     Decimal   @map("cost_price") @db.Decimal(12, 4)
+  pricePerUnit  Decimal   @map("price_per_unit") @db.Decimal(12, 4)
+  pricePerBox   Decimal?  @map("price_per_box") @db.Decimal(12, 4)
+  isActive      Boolean   @default(true) @map("is_active")
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt     DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  product   Product                  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  images    ProductVariantImage[]
+  stock     WarehouseStock[]
+  lineItems OrderLineItem[]
+
+  @@schema("public")
+  @@map("product_variants")
+}
+
+model ProductVariantImage {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  variantId String   @map("variant_id") @db.Uuid
+  url       String   @db.Text
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  variant ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  @@schema("public")
+  @@map("product_variant_images")
+}
+
+// ─── Inventory ───────────────────────────────────────────────────────────────
+model Warehouse {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name           String   @db.VarChar(255)
+  stockAuthority String   @default("internal") @map("stock_authority") @db.VarChar(20)
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  stock      WarehouseStock[]
+  lineItems  OrderLineItem[]
+
+  @@schema("public")
+  @@map("warehouses")
+}
+
+model WarehouseStock {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  warehouseId      String   @map("warehouse_id") @db.Uuid
+  productVariantId String   @map("product_variant_id") @db.Uuid
+  availableQty     Int      @default(0) @map("available_qty")
+  reservedQty      Int      @default(0) @map("reserved_qty")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  warehouse Warehouse   @relation(fields: [warehouseId], references: [id])
+  variant   ProductVariant @relation(fields: [productVariantId], references: [id])
+
+  @@unique([warehouseId, productVariantId])
+  @@schema("public")
+  @@map("warehouse_stock")
+}
+
+// ─── Orders ──────────────────────────────────────────────────────────────────
+// order_number is generated in app using sequence order_number_seq (migration creates it)
+model Order {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orderNumber     String    @unique @map("order_number") @db.VarChar(50)
+  clientId        String    @map("client_id") @db.Uuid
+  agentId         String    @map("agent_id") @db.Uuid
+  status          String    @default("draft") @db.VarChar(30)
+  currentVersion  Int       @default(1) @map("current_version")
+  versionLock     Int       @default(0) @map("version_lock")
+  notes           String?   @db.Text
+  syncStatus      String?   @map("sync_status") @db.VarChar(20)
+  deliveryId      String?   @map("delivery_id") @db.Uuid
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt       DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  client  User   @relation("OrderClient", fields: [clientId], references: [id])
+  agent   User   @relation("OrderAgent", fields: [agentId], references: [id])
+  lineItems OrderLineItem[]
+  versions OrderVersion[]
+
+  @@schema("public")
+  @@map("orders")
+}
+
+model OrderLineItem {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orderId         String   @map("order_id") @db.Uuid
+  variantId       String   @map("variant_id") @db.Uuid
+  warehouseId     String   @map("warehouse_id") @db.Uuid
+  qty             Int
+  unitType        String   @map("unit_type") @db.VarChar(20)
+  basePrice       Decimal  @map("base_price") @db.Decimal(12, 4)
+  groupDiscount   Decimal  @default(0) @map("group_discount") @db.Decimal(12, 4)
+  managerOverride Decimal? @map("manager_override") @db.Decimal(12, 4)
+  finalPrice      Decimal  @map("final_price") @db.Decimal(12, 4)
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  order     Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  variant   ProductVariant @relation(fields: [variantId], references: [id])
+  warehouse Warehouse     @relation(fields: [warehouseId], references: [id])
+
+  @@schema("public")
+  @@map("order_line_items")
+}
+
+model OrderVersion {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orderId        String   @map("order_id") @db.Uuid
+  versionNumber  Int      @map("version_number")
+  snapshot       Json     @db.JsonB
+  diff           Json?    @db.JsonB
+  createdBy      String   @map("created_by") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  order    Order @relation(fields: [orderId], references: [id])
+  createdByUser User @relation(fields: [createdBy], references: [id])
+
+  @@unique([orderId, versionNumber])
+  @@schema("public")
+  @@map("order_versions")
+}
+
+// ─── Audit (separate schema) ──────────────────────────────────────────────────
+model AuditLog {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  eventType      String    @map("event_type") @db.VarChar(100)
+  actorId        String?   @map("actor_id") @db.Uuid
+  actorRole      String?   @map("actor_role") @db.VarChar(50)
+  targetType     String?   @map("target_type") @db.VarChar(100)
+  targetId       String?   @map("target_id") @db.Uuid
+  payload        Json      @default("{}") @db.JsonB
+  ipAddress      String?   @map("ip_address") @db.VarChar(45)
+  correlationId  String?   @map("correlation_id") @db.Uuid
+  clearedAt      DateTime? @map("cleared_at") @db.Timestamptz(6)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@schema("audit")
+  @@map("audit_log")
+}
+
+// ─── I18n ────────────────────────────────────────────────────────────────────
+model UiTranslation {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  language  String   @db.VarChar(5)
+  key       String   @db.VarChar(255)
+  value     String   @db.Text
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([language, key])
+  @@schema("public")
+  @@map("ui_translations")
+}

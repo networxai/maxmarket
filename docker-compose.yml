@@ -1,0 +1,50 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: MaxMarket_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-maxmarket_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-maxmarket_password}
+      POSTGRES_DB: ${POSTGRES_DB:-maxmarket_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-maxmarket_user} -d ${POSTGRES_DB:-maxmarket_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: ./services/api
+      dockerfile: Dockerfile
+    container_name: MaxMarket_api
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-maxmarket_user}:${POSTGRES_PASSWORD:-maxmarket_password}@postgres:5432/${POSTGRES_DB:-maxmarket_db}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-dev-access-secret-change-in-production}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-dev-refresh-secret-change-in-production}
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: "3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ./services/web
+      dockerfile: Dockerfile
+    container_name: MaxMarket_web
+    restart: unless-stopped
+    ports:
+      - "5173:80"
+    depends_on:
+      - api
+
+volumes:
+  postgres_data:

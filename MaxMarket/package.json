@@ -1,0 +1,16 @@
+{
+  "name": "maxmarket",
+  "version": "1.0.0",
+  "private": true,
+  "description": "MaxMarket B2B Wholesale Platform",
+  "scripts": {
+    "dev": "docker-compose up",
+    "dev:build": "docker-compose up --build",
+    "dev:down": "docker-compose down",
+    "dev:reset": "docker-compose down -v && docker-compose up --build",
+    "test:api": "cd services/api && npm run test",
+    "build:api": "cd services/api && npm run build",
+    "build:web": "cd services/web && npm run build",
+    "seed": "cd services/api && npx prisma db seed"
+  }
+}

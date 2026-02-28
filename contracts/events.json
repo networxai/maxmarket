@@ -1,0 +1,309 @@
+{
+  "_meta": {
+    "version": "1.0",
+    "description": "MaxMarket domain events. In v1, events are emitted via Node.js typed EventEmitter within the monolith. v2 can replace emitter with external message broker (e.g., RabbitMQ, Kafka) without changing event schemas. All events follow a common envelope.",
+    "envelope": {
+      "eventId": "UUID — unique per event emission",
+      "eventType": "string — dot-namespaced type (e.g. order.submitted)",
+      "occurredAt": "ISO8601 timestamp",
+      "correlationId": "UUID — request correlation ID",
+      "actorId": "UUID | null — user who triggered the event",
+      "actorRole": "string | null",
+      "payload": "object — event-specific data (see per-event schema)"
+    }
+  },
+
+  "events": {
+
+    "order.created": {
+      "description": "A new Draft order was created by an Agent.",
+      "emittedBy": "orders.service.createOrder",
+      "consumers_v1": ["audit.service"],
+      "consumers_v2": [],
+      "payload": {
+        "orderId": "uuid",
+        "orderNumber": "string",
+        "agentId": "uuid",
+        "clientId": "uuid",
+        "lineItemCount": "integer",
+        "totalAmount": "number"
+      }
+    },
+
+    "order.draft_edited": {
+      "description": "An Agent edited a Draft order.",
+      "emittedBy": "orders.service.editDraftOrder",
+      "consumers_v1": ["audit.service"],
+      "consumers_v2": [],
+      "payload": {
+        "orderId": "uuid",
+        "agentId": "uuid",
+        "changedFields": [
+          {
+            "field": "string",
+            "oldValue": "any",
+            "newValue": "any"
+          }
+        ]
+      }
+    },
+
+    "order.submitted": {
+      "description": "Agent submitted a Draft order. Prices recalculated from current group discount.",
+      "emittedBy": "orders.service.submitOrder",
+      "consumers_v1": ["audit.service"],
+      "consumers_v2": [],
+      "payload": {
+        "orderId": "uuid",
+        "agentId": "uuid",
+        "clientId": "uuid",
+        "lineItems": [
+          {
+            "lineItemId": "uuid",
+            "variantId": "uuid",
+            "qty": "integer",
+            "finalPrice": "number"
+          }
+        ],
+        "pricesRecalculated": "boolean"
+      }
+    },
+
+    "order.approved": {
+      "description": "Manager approved a Submitted order. Stock reserved.",
+      "emittedBy": "orders.service.approveOrder",
+      "consumers_v1": ["audit.service", "inventory.service (stock reservation handled in same transaction)"],
+      "consumers_v2": ["accounting.sync (v2)"],
+      "payload": {
+        "orderId": "uuid",
+        "managerId": "uuid",
+        "stockReservations": [
+          {
+            "variantId": "uuid",
+            "warehouseId": "uuid",
+            "reservedQty": "integer"
+          }
+        ]
+      }
+    },
+
+    "order.rejected": {
+      "description": "Manager rejected a Submitted order.",
+      "emittedBy": "orders.service.rejectOrder",
+      "consumers_v1": ["audit.service"],
+      "consumers_v2": [],
+      "payload": {
+        "orderId": "uuid",
+        "managerId": "uuid",
+        "reason": "string | null"
+      }
+    },
+
+    "order.fulfilled": {
+      "description": "Manager marked order as Fulfilled. Stock decremented.",
+      "emittedBy": "orders.service.fulfillOrder",
+      "consumers_v1": ["audit.service"],
+      "consumers_v2": ["accounting.sync (v2)", "delivery.service (v2)"],
+      "payload": {
+        "orderId": "uuid",
+        "managerId": "uuid",
+        "stockDecrements": [
+          {
+            "variantId": "uuid",
+            "warehouseId": "uuid",
+            "decrementedQty": "integer"
+          }
+        ]
+      }
+    },
+
+    "order.cancelled": {
+      "description": "Approved order cancelled. Reserved stock released.",
+      "emittedBy": "orders.service.cancelOrder",
+      "consumers_v1": ["audit.service"],
+      "consumers_v2": [],
+      "payload": {
+        "orderId": "uuid",
+        "actorId": "uuid",
+        "actorRole": "string",
+        "stockReleases": [
+          {
+            "variantId": "uuid",
+            "warehouseId": "uuid",
+            "releasedQty": "integer"
+          }
+        ]
+      }
+    },
+
+    "order.returned": {
+      "description": "Fulfilled order returned. available_qty auto-restored.",
+      "emittedBy": "orders.service.returnOrder",
+      "consumers_v1": ["audit.service"],
+      "consumers_v2": [],
+      "payload": {
+        "orderId": "uuid",
+        "actorId": "uuid",
+        "actorRole": "string",
+        "stockRestorations": [
+          {
+            "variantId": "uuid",
+            "warehouseId": "uuid",
+            "restoredQty": "integer"
+          }
+        ]
+      }
+    },
+
+    "order.version_created": {
+      "description": "Admin edited an Approved order, creating an immutable version snapshot and resetting status to Submitted.",
+      "emittedBy": "orders.service.editApprovedOrder",
+      "consumers_v1": ["audit.service"],
+      "consumers_v2": [],
+      "payload": {
+        "orderId": "uuid",
+        "newVersionNumber": "integer",
+        "previousVersionNumber": "integer",
+        "adminId": "uuid",
+        "diff": [
+          {
+            "field": "string",
+            "oldValue": "any",
+            "newValue": "any"
+          }
+        ],
+        "stockRecheckRequired": true
+      }
+    },
+
+    "order.price_override": {
+      "description": "Manager overrode a line item price before approval.",
+      "emittedBy": "orders.service.overrideLineItemPrice",
+      "consumers_v1": ["audit.service"],
+      "consumers_v2": [],
+      "payload": {
+        "orderId": "uuid",
+        "lineItemId": "uuid",
+        "managerId": "uuid",
+        "originalPrice": "number",
+        "overridePrice": "number"
+      }
+    },
+
+    "stock.adjusted": {
+      "description": "Admin manually adjusted warehouse stock available_qty.",
+      "emittedBy": "inventory.service.adjustStock",
+      "consumers_v1": ["audit.service"],
+      "consumers_v2": ["accounting.sync (v2)"],
+      "payload": {
+        "warehouseId": "uuid",
+        "variantId": "uuid",
+        "adminId": "uuid",
+        "oldAvailableQty": "integer",
+        "newAvailableQty": "integer",
+        "reservedQty": "integer",
+        "reason": "string"
+      }
+    },
+
+    "auth.login_attempt": {
+      "description": "Login attempt recorded (success or failure).",
+      "emittedBy": "auth.service.login",
+      "consumers_v1": ["audit.service"],
+      "consumers_v2": [],
+      "payload": {
+        "attemptedEmail": "string",
+        "userId": "uuid | null",
+        "success": "boolean",
+        "ipAddress": "string",
+        "userAgent": "string | null"
+      }
+    },
+
+    "user.role_changed": {
+      "description": "Super Admin changed a user's role.",
+      "emittedBy": "users.service.updateUser",
+      "consumers_v1": ["audit.service"],
+      "consumers_v2": [],
+      "payload": {
+        "targetUserId": "uuid",
+        "changedById": "uuid",
+        "oldRole": "string",
+        "newRole": "string"
+      }
+    },
+
+    "user.deactivated": {
+      "description": "Super Admin deactivated a user account.",
+      "emittedBy": "users.service.deactivateUser",
+      "consumers_v1": ["audit.service"],
+      "consumers_v2": [],
+      "payload": {
+        "targetUserId": "uuid",
+        "deactivatedById": "uuid"
+      }
+    },
+
+    "audit.logs_cleared": {
+      "description": "Super Admin soft-cleared audit logs. This event itself is NOT clearable.",
+      "emittedBy": "audit.service.clearLogs",
+      "consumers_v1": ["audit.service (self — first INSERT before soft-delete)"],
+      "consumers_v2": [],
+      "payload": {
+        "clearedById": "uuid",
+        "scope": "before_date",
+        "beforeDate": "ISO8601",
+        "clearedCount": "integer"
+      }
+    },
+
+    "pricing.group_discount_changed": {
+      "description": "Admin changed a client group discount rule. Affects new + Draft orders on next submission.",
+      "emittedBy": "client_groups.service.updateGroup",
+      "consumers_v1": ["audit.service"],
+      "consumers_v2": [],
+      "payload": {
+        "groupId": "uuid",
+        "adminId": "uuid",
+        "oldDiscountType": "string",
+        "oldDiscountValue": "number",
+        "newDiscountType": "string",
+        "newDiscountValue": "number",
+        "affectedDraftOrdersNote": "Prices recalculated on next submission, not immediately"
+      }
+    }
+
+  },
+
+  "v2_hooks": {
+    "_description": "Events reserved for v2 integrations. Not implemented in v1 but event schemas are designed to support them.",
+    "accounting.invoice_synced": {
+      "description": "v2: Two-way sync with accounting system confirmed invoice.",
+      "payload": {
+        "orderId": "uuid",
+        "invoiceId": "string",
+        "syncedAt": "ISO8601",
+        "authority": "accounting"
+      }
+    },
+    "delivery.tracking_updated": {
+      "description": "v2: Delivery tracking status updated.",
+      "payload": {
+        "orderId": "uuid",
+        "deliveryId": "uuid",
+        "status": "string",
+        "updatedAt": "ISO8601"
+      }
+    },
+    "warehouse.external_stock_sync": {
+      "description": "v2: External system updated stock authority.",
+      "payload": {
+        "warehouseId": "uuid",
+        "variantId": "uuid",
+        "newAvailableQty": "integer",
+        "authority": "external",
+        "syncedAt": "ISO8601"
+      }
+    }
+  }
+}

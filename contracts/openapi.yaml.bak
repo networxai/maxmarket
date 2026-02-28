@@ -1,0 +1,3408 @@
+openapi: "3.0.3"
+info:
+  title: MaxMarket API
+  version: "1.0.2"
+  description: |
+    MaxMarket B2B wholesale platform API.
+    Base URL: /api/v1
+
+    **Correlation ID:** Every request MAY include an `X-Correlation-ID` header (UUID).
+    If provided, the server echoes it in the response. If absent, the server generates one.
+    Every response carries `X-Correlation-ID` in the response header.
+    Every error response includes `correlationId` in the body.
+
+    **Error envelope:** All error responses use the `ErrorResponse` schema.
+
+    **Public catalog:** `GET /catalog/products` and `GET /catalog/products/{id}` require no
+    authentication and return `PublicProduct` — price fields are entirely omitted.
+    Authenticated requests to those same endpoints return `Product` with role-appropriate
+    price fields resolved server-side.
+
+    **Optimistic locking:** `POST /orders/{id}/approve` AND `PUT /orders/{id}` (when editing
+    an Approved order) both require the current `versionLock` value to prevent concurrent
+    conflicting writes.
+
+    **Draft order pricing:** At Draft creation, `groupDiscount = 0` and `finalPrice = basePrice`
+    (captured from current `pricePerUnit`). Both values are recalculated on submission from
+    the then-current client group discount rule (DN-PRICE-02).
+
+    **Decision Needed (open):**
+    - DA-05: Can an Admin change a variant's SKU if non-Draft orders reference it?
+      Recommendation: block if any non-Draft/non-Rejected/non-Cancelled orders exist.
+    - DA-06: Does image management require binary multipart upload or URL-only reference?
+      Current spec assumes URL-only (CDN pre-upload pattern).
+
+    **Changelog v1.0.2 (Opus Final Gate):**
+    - FIX-O1: Added SalesReportRow / SalesByManagerRow schemas; response schemas on all 4 report GET endpoints
+    - FIX-O6/O7: Added 403 responses to approve, reject, fulfill, cancel, return, versions list/detail
+    - FIX-O8: Added 403 to GET /users/{agentId}/clients
+    - FIX-O10: Order.agentId nullable + client-stripping note
+    - FIX-O11: Draft pricing behaviour documented on POST /orders and OrderLineItem fields
+    - FIX-O12/O13: Removed phantom DA-05/DA-06 references; added inline business rules + Decision Needed section
+
+    **Changelog v1.0.1 (Opus consistency pass):**
+    - C1: PublicProduct/PublicProductVariant schemas; public catalog endpoints use them
+    - C2: versionLock added to PUT /orders/{id} request body
+    - C3: X-Correlation-ID declared as response header component on all responses
+    - H1: Variant CRUD + image management endpoints added
+    - H2: Category PUT/DELETE endpoints added
+    - H3: InsufficientStockDetail schema; approve 422 typed
+    - H4: Role descriptions + agent scoping added to all report endpoints
+    - M4: ErrorResponse referenced on all error responses; version snapshot/list schemas added
+    - M5: STOCK_BELOW_RESERVED error code documented on stock adjust 422
+    - L1: client-groups list now paginated
+    - L2: CorrelationIdRequestHeader parameter component added
+
+servers:
+  - url: /api/v1
+    description: API v1
+
+components:
+  # ─── SECURITY ───────────────────────────────────────────────────────────────
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  # ─── HEADERS ────────────────────────────────────────────────────────────────
+  headers:
+    X-Correlation-ID:
+      description: |
+        UUID for request tracing. Echoed from request X-Correlation-ID header if provided,
+        otherwise server-generated. Present on every response.
+      schema:
+        type: string
+        format: uuid
+
+  # ─── PARAMETERS ─────────────────────────────────────────────────────────────
+  parameters:
+    PageParam:
+      name: page
+      in: query
+      schema:
+        type: integer
+        default: 1
+        minimum: 1
+    PageSizeParam:
+      name: pageSize
+      in: query
+      schema:
+        type: integer
+        default: 20
+        minimum: 1
+        maximum: 100
+    LanguageHeader:
+      name: Accept-Language
+      in: header
+      schema:
+        type: string
+        enum: [en, hy, ru]
+        default: en
+    CorrelationIdRequestHeader:
+      name: X-Correlation-ID
+      in: header
+      required: false
+      description: Optional client-provided correlation UUID. Server echoes it in the response header.
+      schema:
+        type: string
+        format: uuid
+
+  # ─── SCHEMAS ────────────────────────────────────────────────────────────────
+  schemas:
+
+    # --- Error ---
+    ErrorResponse:
+      type: object
+      required: [errorCode, message, correlationId]
+      properties:
+        errorCode:
+          type: string
+          description: |
+            Machine-readable error code. Known values include:
+            INSUFFICIENT_STOCK, ORDER_NOT_EDITABLE, OPTIMISTIC_LOCK_CONFLICT,
+            STOCK_BELOW_RESERVED, VALIDATION_ERROR, TOKEN_EXPIRED, TOKEN_MISSING,
+            FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED
+          example: INSUFFICIENT_STOCK
+        message:
+          type: string
+          description: Human-readable error message.
+        details:
+          nullable: true
+          description: |
+            Structured error detail. Schema depends on errorCode:
+            - INSUFFICIENT_STOCK: array of InsufficientStockDetail
+            - VALIDATION_ERROR: array of Zod validation errors
+            - All others: null or plain string
+        correlationId:
+          type: string
+          format: uuid
+
+    InsufficientStockDetail:
+      type: object
+      description: |
+        Per-line-item stock shortage detail. Returned in ErrorResponse.details array
+        when errorCode = INSUFFICIENT_STOCK (PRD FS-ORD-01).
+      required: [lineItemId, variantId, sku, requestedQty, availableQty, reservedQty]
+      properties:
+        lineItemId:
+          type: string
+          format: uuid
+        variantId:
+          type: string
+          format: uuid
+        sku:
+          type: string
+        requestedQty:
+          type: integer
+        availableQty:
+          type: integer
+        reservedQty:
+          type: integer
+
+    # --- Pagination ---
+    PaginationMeta:
+      type: object
+      required: [page, pageSize, totalCount, totalPages]
+      properties:
+        page:
+          type: integer
+        pageSize:
+          type: integer
+        totalCount:
+          type: integer
+        totalPages:
+          type: integer
+
+    # --- Common ---
+    MultilingualString:
+      type: object
+      description: |
+        Multilingual text field. English is required; hy and ru are optional.
+        If hy or ru are absent, the API returns the en value as fallback (DN-LANG-01).
+      required: [en]
+      properties:
+        en:
+          type: string
+        hy:
+          type: string
+          nullable: true
+        ru:
+          type: string
+          nullable: true
+
+    Role:
+      type: string
+      enum: [super_admin, admin, manager, agent, client]
+
+    # --- Users ---
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        fullName:
+          type: string
+        role:
+          $ref: '#/components/schemas/Role'
+        preferredLanguage:
+          type: string
+          enum: [en, hy, ru]
+        isActive:
+          type: boolean
+        clientGroupId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Populated only for role = client.
+        createdAt:
+          type: string
+          format: date-time
+
+    # --- Client Groups ---
+    ClientGroup:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        discountType:
+          type: string
+          enum: [fixed, percentage]
+        discountValue:
+          type: number
+          format: double
+
+    # --- Catalog (Public — NO price fields) ---
+    PublicProductVariant:
+      type: object
+      description: |
+        Variant shape returned for unauthenticated (public) requests.
+        All price fields are OMITTED to comply with CTO_PACKET §2 and PRD §2.2.
+      properties:
+        id:
+          type: string
+          format: uuid
+        sku:
+          type: string
+        unitType:
+          type: string
+          enum: [piece, box, kg]
+        minOrderQty:
+          type: integer
+        images:
+          type: array
+          items:
+            type: string
+            format: uri
+        isActive:
+          type: boolean
+
+    PublicProduct:
+      type: object
+      description: |
+        Product shape returned for unauthenticated (public) requests.
+        Uses PublicProductVariant — no cost or client pricing exposed.
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          description: Resolved to Accept-Language with en fallback.
+        description:
+          type: string
+        category:
+          type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+            name:
+              type: string
+        variants:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublicProductVariant'
+        isActive:
+          type: boolean
+
+    # --- Catalog (Authenticated — includes price fields) ---
+    ProductVariant:
+      type: object
+      description: |
+        Variant shape returned for authenticated requests.
+        costPrice: visible to agent, manager, admin, super_admin only — stripped for client.
+        clientPrice: base_price - group_discount; null for roles with no group (agent/manager see all group prices).
+        pricePerUnit / pricePerBox: base prices; visible to all authenticated roles.
+      properties:
+        id:
+          type: string
+          format: uuid
+        sku:
+          type: string
+        unitType:
+          type: string
+          enum: [piece, box, kg]
+        minOrderQty:
+          type: integer
+        costPrice:
+          type: number
+          format: double
+          nullable: true
+          description: Visible to agent, manager, admin, super_admin. Stripped (null) for client.
+        pricePerUnit:
+          type: number
+          format: double
+        pricePerBox:
+          type: number
+          format: double
+          nullable: true
+        clientPrice:
+          type: number
+          format: double
+          nullable: true
+          description: |
+            Computed as base_price - group_discount for the requesting client's group.
+            Null for agents/managers viewing catalog (they use pricePerUnit directly).
+        images:
+          type: array
+          items:
+            type: string
+            format: uri
+        isActive:
+          type: boolean
+
+    Product:
+      type: object
+      description: Authenticated product view. Uses ProductVariant with role-based field stripping.
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          description: Resolved to Accept-Language with en fallback.
+        description:
+          type: string
+        category:
+          type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+            name:
+              type: string
+        variants:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductVariant'
+        isActive:
+          type: boolean
+
+    Category:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          description: Resolved to Accept-Language with en fallback.
+
+    # --- Inventory ---
+    WarehouseStock:
+      type: object
+      properties:
+        variantId:
+          type: string
+          format: uuid
+        sku:
+          type: string
+        warehouseId:
+          type: string
+          format: uuid
+        availableQty:
+          type: integer
+        reservedQty:
+          type: integer
+
+    # --- Orders ---
+    OrderLineItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        variantId:
+          type: string
+          format: uuid
+        sku:
+          type: string
+        warehouseId:
+          type: string
+          format: uuid
+        qty:
+          type: integer
+        unitType:
+          type: string
+        basePrice:
+          type: number
+          format: double
+          description: Captured from product_variants.price_per_unit at order creation.
+        groupDiscount:
+          type: number
+          format: double
+          description: |
+            Captured from `client_groups.discount_value` at **submission** time (not at Draft creation).
+            At Draft stage this value is `0`.
+            Raw value is stripped (null) for client role — clients see only `finalPrice` (PRD §3.2).
+            Recalculated on every submission from the then-current group discount rule (DN-PRICE-02).
+        finalPrice:
+          type: number
+          format: double
+          description: |
+            `manager_override` if set, else `(base_price - group_discount)`. Recomputed on submission.
+            At Draft stage: `finalPrice = basePrice` (groupDiscount not yet applied).
+            Only this field is visible in the UI for all roles; managerOverride is audit-only (PRD §3.2).
+
+    OrderStatus:
+      type: string
+      enum: [draft, submitted, approved, fulfilled, rejected, cancelled, returned]
+
+    Order:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        orderNumber:
+          type: string
+          description: Human-readable, server-generated (e.g. MM-2024-001001).
+        clientId:
+          type: string
+          format: uuid
+        agentId:
+          type: string
+          format: uuid
+          nullable: true
+          description: |
+            UUID of the agent who created the order.
+            Stripped (null) for client role responses — clients do not see agent assignment data
+            (PRD §1.5; 09_RBAC_SECURITY.md §5.6).
+        status:
+          $ref: '#/components/schemas/OrderStatus'
+        currentVersion:
+          type: integer
+          description: Sequential version number. Incremented on each Admin version edit.
+        versionLock:
+          type: integer
+          description: |
+            Optimistic concurrency counter. Incremented on approve and on Admin version edit.
+            Must be echoed in POST /orders/{id}/approve and PUT /orders/{id} (when Approved)
+            to prevent dual-approval and concurrent version creation (EC-ORD-05).
+        lineItems:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderLineItem'
+        notes:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    OrderVersionSummary:
+      type: object
+      description: Summary row in order version list.
+      properties:
+        versionNumber:
+          type: integer
+        createdByUserId:
+          type: string
+          format: uuid
+        createdAt:
+          type: string
+          format: date-time
+        diffSummary:
+          type: string
+          description: Human-readable one-line summary of what changed.
+
+    OrderVersionDetail:
+      type: object
+      description: Full version snapshot with field-level diff.
+      properties:
+        versionNumber:
+          type: integer
+        snapshot:
+          $ref: '#/components/schemas/Order'
+        diff:
+          type: array
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+              oldValue: {}
+              newValue: {}
+        createdByUserId:
+          type: string
+          format: uuid
+        createdAt:
+          type: string
+          format: date-time
+
+    # --- Reports ---
+    SalesReportRow:
+      type: object
+      description: |
+        Single aggregated row in sales-by-date, sales-by-client, or sales-by-product reports.
+        Represents totals for the grouping dimension within the requested date range.
+      properties:
+        dimension:
+          type: string
+          description: |
+            The grouping value (date string for sales-by-date; clientId for sales-by-client;
+            variantId/sku for sales-by-product).
+        dimensionLabel:
+          type: string
+          description: Human-readable label for the dimension (e.g. date string, client name, SKU).
+        orderCount:
+          type: integer
+          description: Number of Fulfilled orders in the dimension.
+        totalQty:
+          type: integer
+          description: Total units fulfilled.
+        totalRevenue:
+          type: number
+          format: double
+          description: Sum of (finalPrice × qty) for all Fulfilled line items in the dimension.
+        currencyNote:
+          type: string
+          description: Currency is always the system default (v1 single currency).
+          nullable: true
+
+    SalesByManagerRow:
+      type: object
+      description: Single row in the sales-by-manager report.
+      properties:
+        managerId:
+          type: string
+          format: uuid
+        managerName:
+          type: string
+        orderCount:
+          type: integer
+        totalRevenue:
+          type: number
+          format: double
+
+    # --- Audit ---
+    AuditLogEntry:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        eventType:
+          type: string
+          description: Dot-namespaced event type string (see events.json and DB_SCHEMA §6).
+        actorId:
+          type: string
+          format: uuid
+          nullable: true
+        actorRole:
+          type: string
+          nullable: true
+        targetType:
+          type: string
+          nullable: true
+        targetId:
+          type: string
+          format: uuid
+          nullable: true
+        payload:
+          type: object
+        ipAddress:
+          type: string
+          nullable: true
+        correlationId:
+          type: string
+          format: uuid
+          nullable: true
+        clearedAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+# Global security: all routes require JWT unless explicitly overridden with security: []
+security:
+  - bearerAuth: []
+
+paths:
+
+  # ─── AUTH ────────────────────────────────────────────────────────────────────
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Login
+      description: Authenticate with email and password. Returns access + refresh token pair.
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/CorrelationIdRequestHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Login successful
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accessToken:
+                    type: string
+                  refreshToken:
+                    type: string
+                  user:
+                    $ref: '#/components/schemas/User'
+        '401':
+          description: Invalid credentials
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Rate limited (10 attempts per 15 min per IP)
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Refresh access token
+      description: Exchange a valid refresh token for a new access + refresh token pair (rotation).
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/CorrelationIdRequestHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken:
+                  type: string
+      responses:
+        '200':
+          description: New token pair issued
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accessToken:
+                    type: string
+                  refreshToken:
+                    type: string
+        '401':
+          description: Invalid, expired, or already-used refresh token
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Logout (invalidate refresh token)
+      parameters:
+        - $ref: '#/components/parameters/CorrelationIdRequestHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken:
+                  type: string
+      responses:
+        '200':
+          description: Logged out successfully
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+        '401':
+          description: Invalid token
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ─── USERS ───────────────────────────────────────────────────────────────────
+
+  /users:
+    get:
+      tags: [Users]
+      summary: List users
+      description: "Roles: super_admin, admin"
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+        - $ref: '#/components/parameters/CorrelationIdRequestHeader'
+        - name: role
+          in: query
+          schema:
+            $ref: '#/components/schemas/Role'
+        - name: isActive
+          in: query
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Paginated user list
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/User'
+                  pagination:
+                    $ref: '#/components/schemas/PaginationMeta'
+        '403':
+          description: Forbidden
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      tags: [Users]
+      summary: Create user
+      description: "Roles: super_admin only"
+      parameters:
+        - $ref: '#/components/parameters/CorrelationIdRequestHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, fullName, role]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  minLength: 8
+                fullName:
+                  type: string
+                role:
+                  $ref: '#/components/schemas/Role'
+                preferredLanguage:
+                  type: string
+                  enum: [en, hy, ru]
+                  default: en
+                clientGroupId:
+                  type: string
+                  format: uuid
+                  nullable: true
+                  description: Required when role = client.
+      responses:
+        '201':
+          description: User created
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '409':
+          description: Email already in use
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation error
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /users/{id}:
+    get:
+      tags: [Users]
+      summary: Get user by ID
+      description: "Roles: super_admin, admin (any user); all roles (own profile)"
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/CorrelationIdRequestHeader'
+      responses:
+        '200':
+          description: User
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '404':
+          description: Not found
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    put:
+      tags: [Users]
+      summary: Update user
+      description: |
+        Roles: super_admin (any field on any user); all roles (fullName + preferredLanguage on own profile).
+        Role and isActive fields are super_admin only.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/CorrelationIdRequestHeader'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                fullName:
+                  type: string
+                preferredLanguage:
+                  type: string
+                  enum: [en, hy, ru]
+                role:
+                  $ref: '#/components/schemas/Role'
+                  description: "super_admin only"
+                isActive:
+                  type: boolean
+                  description: "super_admin only"
+                clientGroupId:
+                  type: string
+                  format: uuid
+                  nullable: true
+                  description: "super_admin only; only for client role"
+      responses:
+        '200':
+          description: Updated user
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '403':
+          description: Forbidden
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      tags: [Users]
+      summary: Deactivate user (soft delete)
+      description: "Roles: super_admin only. Sets is_active = false and deleted_at."
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/CorrelationIdRequestHeader'
+      responses:
+        '200':
+          description: Deactivated
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+        '404':
+          description: Not found
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /users/{agentId}/clients:
+    get:
+      tags: [Users]
+      summary: Get clients assigned to agent
+      description: "Roles: super_admin, admin (any agent); manager (any agent); agent (own assignments only)"
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+        - $ref: '#/components/parameters/CorrelationIdRequestHeader'
+      responses:
+        '200':
+          description: Paginated clients
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/User'
+                  pagination:
+                    $ref: '#/components/schemas/PaginationMeta'
+        '403':
+          description: Forbidden (agent requesting another agent's client list)
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /users/{agentId}/clients/{clientId}:
+    post:
+      tags: [Users]
+      summary: Assign client to agent
+      description: "Roles: super_admin, admin"
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/CorrelationIdRequestHeader'
+      responses:
+        '200':
+          description: Assigned
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+        '409':
+          description: Already assigned
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      tags: [Users]
+      summary: Remove client from agent
+      description: "Roles: super_admin, admin"
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/CorrelationIdRequestHeader'
+      responses:
+        '200':
+          description: Removed
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+
+  # ─── CLIENT GROUPS ───────────────────────────────────────────────────────────
+
+  /client-groups:
+    get:
+      tags: [Client Groups]
+      summary: List client groups
+      description: "Roles: super_admin, admin, manager, agent. Note: client role cannot access."
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+        - $ref: '#/components/parameters/CorrelationIdRequestHeader'
+      responses:
+        '200':
+          description: Paginated client groups
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ClientGroup'
+                  pagination:
+                    $ref: '#/components/schemas/PaginationMeta'
+    post:
+      tags: [Client Groups]
+      summary: Create client group
+      description: "Roles: super_admin, admin"
+      parameters:
+        - $ref: '#/components/parameters/CorrelationIdRequestHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, discountType, discountValue]
+              properties:
+                name:
+                  type: string
+                discountType:
+                  type: string
+                  enum: [fixed, percentage]
+                discountValue:
+                  type: number
+                  minimum: 0
+      responses:
+        '201':
+          description: Created
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClientGroup'
+        '422':
+          description: Validation error
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /client-groups/{id}:
+    put:
+      tags: [Client Groups]
+      summary: Update client group
+      description: |
+        Roles: super_admin, admin.
+        Changes affect new orders and existing Draft orders on next submission (DN-PRICE-02).
+        Does NOT affect Approved or Fulfilled orders.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/CorrelationIdRequestHeader'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                discountType:
+                  type: string
+                  enum: [fixed, percentage]
+                discountValue:
+                  type: number
+                  minimum: 0
+      responses:
+        '200':
+          description: Updated
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClientGroup'
+        '404':
+          description: Not found
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      tags: [Client Groups]
+      summary: Delete client group
+      description: "Roles: super_admin, admin. Blocked if any clients are assigned to the group."
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/CorrelationIdRequestHeader'
+      responses:
+        '200':
+          description: Deleted
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+        '404':
+          description: Not found
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Clients are assigned to this group
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ─── CATALOG ─────────────────────────────────────────────────────────────────
+
+  /catalog/products:
+    get:
+      tags: [Catalog]
+      summary: List products
+      description: |
+        **Public (unauthenticated):** Returns `PublicProduct` — price fields entirely omitted
+        (CTO_PACKET §2, PRD §2.2, mandatory standard).
+
+        **Authenticated:** Returns `Product` with price fields present.
+        Role-based field stripping in service layer:
+        - client: sees clientPrice (own group); no costPrice
+        - agent/manager/admin/super_admin: sees costPrice and pricePerUnit/pricePerBox
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+        - $ref: '#/components/parameters/LanguageHeader'
+        - $ref: '#/components/parameters/CorrelationIdRequestHeader'
+        - name: search
+          in: query
+          description: Full-text / trigram search on SKU or product name.
+          schema:
+            type: string
+        - name: category
+          in: query
+          description: Filter by category UUID.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: |
+            Paginated product list.
+            Unauthenticated: PublicProduct items.
+            Authenticated: Product items (price fields populated per role).
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      oneOf:
+                        - $ref: '#/components/schemas/PublicProduct'
+                        - $ref: '#/components/schemas/Product'
+                  pagination:
+                    $ref: '#/components/schemas/PaginationMeta'
+    post:
+      tags: [Catalog]
+      summary: Create product (with initial variant)
+      description: |
+        Roles: super_admin, admin.
+        A product must be created with at least one variant (PRD §2.1).
+        Additional variants can be added via POST /catalog/products/{productId}/variants.
+      parameters:
+        - $ref: '#/components/parameters/CorrelationIdRequestHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, variants]
+              properties:
+                name:
+                  $ref: '#/components/schemas/MultilingualString'
+                description:
+                  $ref: '#/components/schemas/MultilingualString'
+                categoryId:
+                  type: string
+                  format: uuid
+                  nullable: true
+                variants:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    required: [sku, unitType, minOrderQty, costPrice, pricePerUnit]
+                    properties:
+                      sku:
+                        type: string
+                      unitType:
+                        type: string
+                        enum: [piece, box, kg]
+                      minOrderQty:
+                        type: integer
+                        minimum: 1
+                      costPrice:
+                        type: number
+                        minimum: 0
+                        description: Internal cost price. Not visible to clients.
+                      pricePerUnit:
+                        type: number
+                        minimum: 0
+                      pricePerBox:
+                        type: number
+                        minimum: 0
+                        nullable: true
+      responses:
+        '201':
+          description: Product created
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '409':
+          description: SKU already exists
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation error
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /catalog/products/{id}:
+    get:
+      tags: [Catalog]
+      summary: Get product by ID
+      description: |
+        **Public (unauthenticated):** Returns `PublicProduct` — no price fields.
+        **Authenticated:** Returns `Product` with role-appropriate price fields.
+      security: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/LanguageHeader'
+        - $ref: '#/components/parameters/CorrelationIdRequestHeader'
+      responses:
+        '200':
+          description: Product
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/PublicProduct'
+                  - $ref: '#/components/schemas/Product'
+        '404':
+          description: Not found
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    put:
+      tags: [Catalog]
+      summary: Update product metadata
+      description: "Roles: super_admin, admin. Updates name, description, categoryId, isActive."
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/CorrelationIdRequestHeader'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  $ref: '#/components/schemas/MultilingualString'
+                description:
+                  $ref: '#/components/schemas/MultilingualString'
+                categoryId:
+                  type: string
+                  format: uuid
+                  nullable: true
+                isActive:
+                  type: boolean
+      responses:
+        '200':
+          description: Updated product
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '404':
+          description: Not found
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      tags: [Catalog]
+      summary: Soft delete product
+      description: "Roles: super_admin, admin. Blocked if product has active (non-rejected, non-cancelled) orders."
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/CorrelationIdRequestHeader'
+      responses:
+        '200':
+          description: Soft deleted
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+        '404':
+          description: Not found
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Product has active orders
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ─── VARIANT CRUD (H1 fix) ───────────────────────────────────────────────────
+
+  /catalog/products/{productId}/variants:
+    post:
+      tags: [Catalog]
+      summary: Add variant to existing product
+      description: "Roles: super_admin, admin"
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/CorrelationIdRequestHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sku, unitType, minOrderQty, costPrice, pricePerUnit]
+              properties:
+                sku:
+                  type: string
+                unitType:
+                  type: string
+                  enum: [piece, box, kg]
+                minOrderQty:
+                  type: integer
+                  minimum: 1
+                costPrice:
+                  type: number
+                  minimum: 0
+                pricePerUnit:
+                  type: number
+                  minimum: 0
+                pricePerBox:
+                  type: number
+                  minimum: 0
+                  nullable: true
+      responses:
+        '201':
+          description: Variant created
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductVariant'
+        '409':
+          description: SKU already exists
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation error
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /catalog/products/{productId}/variants/{variantId}:
+    put:
+      tags: [Catalog]
+      summary: Update variant
+      description: |
+        Roles: super_admin, admin.
+        Allows updating pricing fields (costPrice, pricePerUnit, pricePerBox),
+        minOrderQty, unitType, isActive.
+        SKU change is blocked if any non-Draft, non-Rejected, non-Cancelled orders
+        reference this variant (order history integrity). Returns 409 if blocked.
+        Base price (pricePerUnit/pricePerBox) changes take effect on new orders and
+        on Draft order submissions; Approved/Fulfilled orders are not affected.
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: variantId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/CorrelationIdRequestHeader'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                sku:
+                  type: string
+                  description: |
+                    SKU update is blocked if any non-Draft, non-Rejected, non-Cancelled orders
+                    reference this variant (to preserve order history integrity).
+                    Returns 409 CONFLICT if blocked. See Decision Needed DA-05 in API info block.
+                unitType:
+                  type: string
+                  enum: [piece, box, kg]
+                minOrderQty:
+                  type: integer
+                  minimum: 1
+                costPrice:
+                  type: number
+                  minimum: 0
+                pricePerUnit:
+                  type: number
+                  minimum: 0
+                pricePerBox:
+                  type: number
+                  minimum: 0
+                  nullable: true
+                isActive:
+                  type: boolean
+      responses:
+        '200':
+          description: Updated variant
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductVariant'
+        '404':
+          description: Not found
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: SKU conflict or blocked by active orders
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      tags: [Catalog]
+      summary: Soft delete variant
+      description: "Roles: super_admin, admin. Blocked if variant has active (non-rejected, non-cancelled) orders."
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: variantId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/CorrelationIdRequestHeader'
+      responses:
+        '200':
+          description: Soft deleted
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+        '404':
+          description: Not found
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Variant has active orders
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ─── VARIANT IMAGES (H1 fix) ─────────────────────────────────────────────────
+
+  /catalog/products/{productId}/variants/{variantId}/images:
+    post:
+      tags: [Catalog]
+      summary: Add image to variant
+      description: |
+        Roles: super_admin, admin.
+        Images are stored as URLs (CDN pre-upload pattern assumed for v1).
+        Binary file upload (multipart) is not supported in v1. See Decision Needed DA-06
+        in API info block if the team decides binary upload is required.
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: variantId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/CorrelationIdRequestHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [url]
+              properties:
+                url:
+                  type: string
+                  format: uri
+                sortOrder:
+                  type: integer
+                  default: 0
+      responses:
+        '201':
+          description: Image added
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  url:
+                    type: string
+                    format: uri
+                  sortOrder:
+                    type: integer
+        '422':
+          description: Validation error
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /catalog/products/{productId}/variants/{variantId}/images/{imageId}:
+    delete:
+      tags: [Catalog]
+      summary: Remove image from variant
+      description: "Roles: super_admin, admin"
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: variantId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: imageId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/CorrelationIdRequestHeader'
+      responses:
+        '200':
+          description: Image removed
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+        '404':
+          description: Not found
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /catalog/products/{productId}/variants/{variantId}/images/reorder:
+    put:
+      tags: [Catalog]
+      summary: Update image sort order
+      description: "Roles: super_admin, admin"
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: variantId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/CorrelationIdRequestHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [order]
+              properties:
+                order:
+                  type: array
+                  description: Array of image IDs in desired sort order (index 0 = primary image).
+                  items:
+                    type: string
+                    format: uuid
+      responses:
+        '200':
+          description: Reordered
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+        '422':
+          description: Validation error (e.g., unknown image IDs)
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ─── CATEGORIES ──────────────────────────────────────────────────────────────
+
+  /catalog/categories:
+    get:
+      tags: [Catalog]
+      summary: List categories
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/LanguageHeader'
+        - $ref: '#/components/parameters/CorrelationIdRequestHeader'
+      responses:
+        '200':
+          description: Category list
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Category'
+    post:
+      tags: [Catalog]
+      summary: Create category
+      description: "Roles: super_admin, admin"
+      parameters:
+        - $ref: '#/components/parameters/CorrelationIdRequestHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  $ref: '#/components/schemas/MultilingualString'
+      responses:
+        '201':
+          description: Created
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Category'
+        '422':
+          description: Validation error
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /catalog/categories/{id}:
+    put:
+      tags: [Catalog]
+      summary: Update category name
+      description: "Roles: super_admin, admin"
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/CorrelationIdRequestHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  $ref: '#/components/schemas/MultilingualString'
+      responses:
+        '200':
+          description: Updated
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Category'
+        '404':
+          description: Not found
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      tags: [Catalog]
+      summary: Soft delete category
+      description: "Roles: super_admin, admin. Blocked if products are assigned to this category."
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/CorrelationIdRequestHeader'
+      responses:
+        '200':
+          description: Soft deleted
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+        '404':
+          description: Not found
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Products assigned to this category
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ─── INVENTORY ───────────────────────────────────────────────────────────────
+
+  /inventory/stock:
+    get:
+      tags: [Inventory]
+      summary: List stock levels
+      description: "Roles: super_admin, admin, manager, agent. Client role cannot access stock data."
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+        - $ref: '#/components/parameters/CorrelationIdRequestHeader'
+        - name: warehouseId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: variantId
+          in: query
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Paginated stock records
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/WarehouseStock'
+                  pagination:
+                    $ref: '#/components/schemas/PaginationMeta'
+        '403':
+          description: Forbidden
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /inventory/stock/adjust:
+    put:
+      tags: [Inventory]
+      summary: Adjust available stock quantity
+      description: |
+        Roles: super_admin, admin only.
+        Sets `available_qty` to the specified value. Cannot be set below `reserved_qty`
+        (PRD §5.3, CTO_PACKET §5). All adjustments are written to audit log (stock.adjusted event).
+        Error code STOCK_BELOW_RESERVED returned if constraint violated.
+      parameters:
+        - $ref: '#/components/parameters/CorrelationIdRequestHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [warehouseId, variantId, newAvailableQty, reason]
+              properties:
+                warehouseId:
+                  type: string
+                  format: uuid
+                variantId:
+                  type: string
+                  format: uuid
+                newAvailableQty:
+                  type: integer
+                  minimum: 0
+                reason:
+                  type: string
+                  description: Required reason for audit trail.
+      responses:
+        '200':
+          description: Stock updated
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WarehouseStock'
+        '422':
+          description: |
+            Constraint violation. errorCode = STOCK_BELOW_RESERVED if newAvailableQty < reservedQty.
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                errorCode: STOCK_BELOW_RESERVED
+                message: "Cannot set available_qty to 5: reserved_qty is 12. Release reservations first."
+                details:
+                  requestedAvailableQty: 5
+                  currentReservedQty: 12
+                correlationId: "550e8400-e29b-41d4-a716-446655440000"
+        '404':
+          description: Variant or warehouse not found
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ─── ORDERS ──────────────────────────────────────────────────────────────────
+
+  /orders:
+    get:
+      tags: [Orders]
+      summary: List orders
+      description: |
+        Roles: super_admin, admin, manager (all orders); agent (own orders only, scoped by agent_id);
+        client (own orders only, scoped by client_id).
+        Scoping enforced server-side regardless of query filters provided.
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+        - $ref: '#/components/parameters/CorrelationIdRequestHeader'
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/OrderStatus'
+        - name: clientId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: agentId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: dateFrom
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: dateTo
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Paginated orders
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Order'
+                  pagination:
+                    $ref: '#/components/schemas/PaginationMeta'
+    post:
+      tags: [Orders]
+      summary: Create draft order
+      description: |
+        Roles: agent only. The client must be in the agent's assigned client list.
+        Prices are NOT set by the caller — they are computed server-side from product_variants
+        and client_groups on submission. warehouseId defaults to the single v1 warehouse if omitted.
+      parameters:
+        - $ref: '#/components/parameters/CorrelationIdRequestHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [clientId, lineItems]
+              properties:
+                clientId:
+                  type: string
+                  format: uuid
+                lineItems:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    required: [variantId, qty]
+                    properties:
+                      variantId:
+                        type: string
+                        format: uuid
+                      qty:
+                        type: integer
+                        minimum: 1
+                      warehouseId:
+                        type: string
+                        format: uuid
+                        description: Defaults to the default v1 warehouse if omitted.
+                notes:
+                  type: string
+                  nullable: true
+      responses:
+        '201':
+          description: Draft order created
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '403':
+          description: Client not assigned to this agent
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation error (e.g. qty below min_order_qty)
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /orders/{id}:
+    get:
+      tags: [Orders]
+      summary: Get order by ID
+      description: |
+        All authenticated roles. Scoping enforced server-side:
+        agents see own orders; clients see own orders; managers/admins see all.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/CorrelationIdRequestHeader'
+      responses:
+        '200':
+          description: Order
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '403':
+          description: Forbidden (order belongs to another agent/client)
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    put:
+      tags: [Orders]
+      summary: Edit order
+      description: |
+        **Agent editing Draft order:** Roles: agent (own drafts only). No versionLock required.
+
+        **Admin editing Approved order (creates version):**
+        Roles: super_admin, admin only. `versionLock` REQUIRED to prevent concurrent version
+        creation conflicts (mandatory standard: optimistic locking on version edit).
+        Editing an Approved order:
+        1. Creates an immutable snapshot in order_versions
+        2. Resets order status to `submitted`
+        3. Increments currentVersion and versionLock
+        4. Requires re-approval (stock delta checked at re-approval, not at edit — DN-STK-02)
+
+        Attempting to edit a Submitted or Rejected order by any role returns ORDER_NOT_EDITABLE.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/CorrelationIdRequestHeader'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                lineItems:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    required: [variantId, qty]
+                    properties:
+                      variantId:
+                        type: string
+                        format: uuid
+                      qty:
+                        type: integer
+                        minimum: 1
+                      warehouseId:
+                        type: string
+                        format: uuid
+                notes:
+                  type: string
+                  nullable: true
+                versionLock:
+                  type: integer
+                  description: |
+                    REQUIRED when editing an Approved order (Admin/Super Admin only).
+                    Must match current versionLock from GET /orders/{id}.
+                    Ignored (and must be omitted) for Draft order edits by Agent.
+      responses:
+        '200':
+          description: |
+            Updated order. For Admin Approved edits, status will be `submitted`,
+            currentVersion incremented, and versionLock incremented.
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '403':
+          description: Forbidden (wrong role or not owner)
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: |
+            Optimistic lock conflict (errorCode: OPTIMISTIC_LOCK_CONFLICT).
+            Stale versionLock — another Admin edit occurred concurrently. Re-fetch and retry.
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: |
+            Order not in editable state (errorCode: ORDER_NOT_EDITABLE) or validation error.
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      tags: [Orders]
+      summary: Delete draft order (soft delete)
+      description: "Roles: agent (own Draft orders only). Non-Draft orders cannot be deleted."
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/CorrelationIdRequestHeader'
+      responses:
+        '200':
+          description: Deleted
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+        '403':
+          description: Forbidden
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Order is not in Draft status
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /orders/{id}/submit:
+    post:
+      tags: [Orders]
+      summary: Submit draft order for approval
+      description: |
+        Roles: agent (own Draft orders only).
+        Recalculates all line item prices from the current client group discount (DN-PRICE-02).
+        Transitions order from Draft → Submitted.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/CorrelationIdRequestHeader'
+      responses:
+        '200':
+          description: Order submitted. Response includes recalculated finalPrices.
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '403':
+          description: Forbidden
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Not in Draft status or validation error
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /orders/{id}/approve:
+    post:
+      tags: [Orders]
+      summary: Approve submitted order
+      description: |
+        Roles: manager only.
+
+        Stock check (PRD §4.3, FS-ORD-01): Approval is BLOCKED if any line item has
+        `available_qty < order_qty`. Error code INSUFFICIENT_STOCK with per-line details.
+
+        Optimistic locking (EC-ORD-05): `versionLock` from GET /orders/{id} MUST be sent.
+        If another manager approved concurrently, returns 409 OPTIMISTIC_LOCK_CONFLICT.
+
+        On success: reserved_qty += order_qty for all line items. Status → Approved.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/CorrelationIdRequestHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [versionLock]
+              properties:
+                versionLock:
+                  type: integer
+                  description: |
+                    Current versionLock value from GET /orders/{id}.
+                    Prevents dual-approval race condition (EC-ORD-05).
+      responses:
+        '200':
+          description: Approved. Stock reserved.
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '403':
+          description: Forbidden (manager role required)
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Optimistic lock conflict (errorCode OPTIMISTIC_LOCK_CONFLICT)
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: |
+            Insufficient stock (errorCode INSUFFICIENT_STOCK) — details array lists each
+            failing line item per PRD FS-ORD-01.
+            OR wrong order state (errorCode ORDER_NOT_EDITABLE).
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ErrorResponse'
+                  - type: object
+                    properties:
+                      details:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/InsufficientStockDetail'
+              examples:
+                insufficient_stock:
+                  summary: Insufficient stock error
+                  value:
+                    errorCode: INSUFFICIENT_STOCK
+                    message: "Approval blocked: insufficient stock for 2 line items."
+                    details:
+                      - lineItemId: "a1b2c3d4-..."
+                        variantId: "e5f6g7h8-..."
+                        sku: "SKU-001"
+                        requestedQty: 50
+                        availableQty: 30
+                        reservedQty: 10
+                    correlationId: "550e8400-..."
+                wrong_state:
+                  summary: Wrong order state
+                  value:
+                    errorCode: ORDER_NOT_EDITABLE
+                    message: "Order is not in Submitted state."
+                    details: null
+                    correlationId: "550e8400-..."
+
+  /orders/{id}/reject:
+    post:
+      tags: [Orders]
+      summary: Reject submitted order
+      description: |
+        Roles: manager only.
+        Rejection reason is optional (DN-ORD-01). Stored in audit log.
+        Rejected orders are terminal — agent must create a new Draft to retry.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/CorrelationIdRequestHeader'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  nullable: true
+                  description: Optional rejection reason. Stored in audit.
+      responses:
+        '200':
+          description: Rejected
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '403':
+          description: Forbidden (manager role required)
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Order is not in Submitted state
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /orders/{id}/fulfill:
+    post:
+      tags: [Orders]
+      summary: Mark order as fulfilled
+      description: |
+        Roles: manager only.
+        Transitions Approved → Fulfilled.
+        Stock effect: reserved_qty -= order_qty AND available_qty -= order_qty.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/CorrelationIdRequestHeader'
+      responses:
+        '200':
+          description: Fulfilled. Stock decremented.
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '403':
+          description: Forbidden (manager role required)
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Order is not in Approved state
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /orders/{id}/cancel:
+    post:
+      tags: [Orders]
+      summary: Cancel approved order
+      description: |
+        Roles: super_admin, admin, manager (DN-ORD-02).
+        Only Approved orders can be cancelled. Terminal state.
+        Stock effect: reserved_qty -= order_qty (reservation released).
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/CorrelationIdRequestHeader'
+      responses:
+        '200':
+          description: Cancelled. Reserved stock released.
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '403':
+          description: Forbidden (requires super_admin, admin, or manager role)
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Order is not in Approved state
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /orders/{id}/return:
+    post:
+      tags: [Orders]
+      summary: Mark fulfilled order as returned
+      description: |
+        Roles: super_admin, admin, manager.
+        Only Fulfilled orders can be returned.
+        Stock effect: available_qty += order_qty (auto-restocked, DN-STK-01 — no manual confirmation required).
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/CorrelationIdRequestHeader'
+      responses:
+        '200':
+          description: Returned. Stock auto-restocked.
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '403':
+          description: Forbidden (requires super_admin, admin, or manager role)
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Order is not in Fulfilled state
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /orders/{id}/versions:
+    get:
+      tags: [Orders]
+      summary: List versions for an order
+      description: "Roles: super_admin, admin, manager. Agents and clients cannot view order versions."
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/CorrelationIdRequestHeader'
+      responses:
+        '200':
+          description: Version summary list
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/OrderVersionSummary'
+                  pagination:
+                    $ref: '#/components/schemas/PaginationMeta'
+        '403':
+          description: Forbidden (agent and client roles cannot view order versions)
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Order not found
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /orders/{id}/versions/{versionNumber}:
+    get:
+      tags: [Orders]
+      summary: Get specific order version snapshot with diff
+      description: "Roles: super_admin, admin, manager"
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: versionNumber
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+        - $ref: '#/components/parameters/CorrelationIdRequestHeader'
+      responses:
+        '200':
+          description: Full version snapshot with field-level diff
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderVersionDetail'
+        '403':
+          description: Forbidden (agent and client roles cannot view order versions)
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Order or version not found
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ─── PRICING OVERRIDE ────────────────────────────────────────────────────────
+
+  /orders/{orderId}/line-items/{lineItemId}/override-price:
+    post:
+      tags: [Orders]
+      summary: Override price on a specific line item
+      description: |
+        Roles: manager only. Order MUST be in `submitted` status (DN-PRICE-01: per line item).
+        The override replaces final_price for this line item only.
+        Override is recorded in audit log with original price, override price, manager ID, timestamp.
+        Only the final price is visible in the UI; the override amount is audit-only.
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: lineItemId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/CorrelationIdRequestHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [overridePrice]
+              properties:
+                overridePrice:
+                  type: number
+                  format: double
+                  minimum: 0
+      responses:
+        '200':
+          description: Line item updated with override price
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderLineItem'
+        '403':
+          description: Forbidden (not a manager)
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Order is not in Submitted state (errorCode ORDER_NOT_EDITABLE)
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ─── REPORTS ─────────────────────────────────────────────────────────────────
+
+  /reports/sales-by-date:
+    get:
+      tags: [Reports]
+      summary: Sales by date range
+      description: |
+        Roles: super_admin, admin, manager (all results);
+        agent (results scoped to assigned clients only — DN-RPT-01).
+        Reports are real-time (DN-RPT-02).
+      parameters:
+        - name: dateFrom
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: dateTo
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+        - $ref: '#/components/parameters/CorrelationIdRequestHeader'
+      responses:
+        '200':
+          description: Sales data grouped by date. Agent receives scoped results only.
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SalesReportRow'
+                  pagination:
+                    $ref: '#/components/schemas/PaginationMeta'
+        '403':
+          description: Forbidden (client role cannot access reports)
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /reports/sales-by-manager:
+    get:
+      tags: [Reports]
+      summary: Sales by manager
+      description: |
+        Roles: super_admin, admin, manager only.
+        Agent cannot access this report (agent cannot view sales attributed to managers).
+      parameters:
+        - name: managerId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: dateFrom
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: dateTo
+          in: query
+          schema:
+            type: string
+            format: date
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+        - $ref: '#/components/parameters/CorrelationIdRequestHeader'
+      responses:
+        '200':
+          description: Sales data grouped by manager.
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SalesByManagerRow'
+                  pagination:
+                    $ref: '#/components/schemas/PaginationMeta'
+        '403':
+          description: Forbidden (agent and client roles cannot access this report)
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /reports/sales-by-client:
+    get:
+      tags: [Reports]
+      summary: Sales by client
+      description: |
+        Roles: super_admin, admin, manager (all clients);
+        agent (scoped to assigned clients only — DN-RPT-01).
+        clientId filter further narrows results.
+      parameters:
+        - name: clientId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: dateFrom
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: dateTo
+          in: query
+          schema:
+            type: string
+            format: date
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+        - $ref: '#/components/parameters/CorrelationIdRequestHeader'
+      responses:
+        '200':
+          description: Sales data grouped by client. Agent receives only assigned clients.
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SalesReportRow'
+                  pagination:
+                    $ref: '#/components/schemas/PaginationMeta'
+        '403':
+          description: Forbidden
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /reports/sales-by-product:
+    get:
+      tags: [Reports]
+      summary: Sales by product/variant
+      description: |
+        Roles: super_admin, admin, manager (all products);
+        agent (scoped to sales by assigned clients only — DN-RPT-01).
+      parameters:
+        - name: variantId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: dateFrom
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: dateTo
+          in: query
+          schema:
+            type: string
+            format: date
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+        - $ref: '#/components/parameters/CorrelationIdRequestHeader'
+      responses:
+        '200':
+          description: Sales data grouped by product/variant. Agent receives results scoped to assigned clients.
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SalesReportRow'
+                  pagination:
+                    $ref: '#/components/schemas/PaginationMeta'
+        '403':
+          description: Forbidden
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /reports/{reportType}/export:
+    get:
+      tags: [Reports]
+      summary: Export report as CSV or PDF
+      description: |
+        Roles: super_admin, admin, manager (all data);
+        agent (export scoped to assigned clients — same scoping as report endpoints — DN-RPT-01).
+        Filters (dateFrom, dateTo, etc.) are applied to the export.
+      parameters:
+        - name: reportType
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [sales-by-date, sales-by-manager, sales-by-client, sales-by-product]
+        - name: format
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [csv, pdf]
+        - name: dateFrom
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: dateTo
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: clientId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: variantId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: managerId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/CorrelationIdRequestHeader'
+      responses:
+        '200':
+          description: Report file stream
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            text/csv:
+              schema:
+                type: string
+                format: binary
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '403':
+          description: Forbidden
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ─── AUDIT ───────────────────────────────────────────────────────────────────
+
+  /audit/logs:
+    get:
+      tags: [Audit]
+      summary: List audit logs
+      description: "Roles: super_admin, admin. Manager, agent, client cannot access audit logs."
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+        - $ref: '#/components/parameters/CorrelationIdRequestHeader'
+        - name: eventType
+          in: query
+          description: Filter by event_type string (see events.json for valid values).
+          schema:
+            type: string
+        - name: actorId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: targetType
+          in: query
+          schema:
+            type: string
+        - name: targetId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: dateFrom
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: dateTo
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: includeCleared
+          in: query
+          description: Include soft-deleted (cleared) log entries.
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Paginated audit log
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AuditLogEntry'
+                  pagination:
+                    $ref: '#/components/schemas/PaginationMeta'
+        '403':
+          description: Forbidden
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /audit/logs/clear:
+    post:
+      tags: [Audit]
+      summary: Soft-clear audit logs
+      description: |
+        Roles: super_admin only.
+        The clearing action is written to audit.audit_log FIRST, then the batch is soft-deleted
+        (cleared_at set). The clearing event itself is never clearable (PRD §9).
+        Error code AUDIT_CLEAR_LOG_NOT_FOUND if no records match the scope.
+      parameters:
+        - $ref: '#/components/parameters/CorrelationIdRequestHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [scope, beforeDate]
+              properties:
+                scope:
+                  type: string
+                  enum: [before_date]
+                  description: Currently only before_date is supported.
+                beforeDate:
+                  type: string
+                  format: date-time
+                  description: Logs with created_at before this timestamp will be soft-cleared.
+      responses:
+        '200':
+          description: Clear result
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [clearedCount]
+                properties:
+                  clearedCount:
+                    type: integer
+                    description: Number of log entries soft-deleted in this operation.
+        '403':
+          description: Forbidden (not super_admin)
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation error
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ─── I18N ────────────────────────────────────────────────────────────────────
+
+  /i18n/ui-strings:
+    get:
+      tags: [I18n]
+      summary: Get UI translation strings for a language
+      security: []
+      parameters:
+        - name: language
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [en, hy, ru]
+        - $ref: '#/components/parameters/CorrelationIdRequestHeader'
+      responses:
+        '200':
+          description: Key-value translation map for the requested language.
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: string
+                example:
+                  "nav.home": "Home"
+                  "orders.status.draft": "Draft"
+                  "errors.insufficient_stock": "Insufficient stock"
+        '422':
+          description: Invalid language code
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    put:
+      tags: [I18n]
+      summary: Update UI translation strings
+      description: "Roles: super_admin only."
+      parameters:
+        - $ref: '#/components/parameters/CorrelationIdRequestHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [language, strings]
+              properties:
+                language:
+                  type: string
+                  enum: [en, hy, ru]
+                strings:
+                  type: object
+                  additionalProperties:
+                    type: string
+                  description: Key-value pairs to upsert. Missing keys are not deleted.
+      responses:
+        '200':
+          description: Translation strings updated
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+        '403':
+          description: Forbidden
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation error
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/X-Correlation-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
