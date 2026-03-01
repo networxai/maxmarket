@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useProducts, useCategories } from "@/api/hooks";
 import { useTranslation } from "@/i18n/useTranslation";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -108,15 +108,15 @@ export function CatalogPage() {
         <>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3">
             {productsData.data.map((product: ProductListItem) => (
-              <Card key={product.id} className="flex flex-col overflow-hidden transition-shadow hover:shadow-md">
-                <div className="aspect-square w-full shrink-0 overflow-hidden bg-muted">
+              <Card key={product.id} className="flex flex-col overflow-hidden group cursor-pointer transition-shadow hover:shadow-[0_4px_18px_0_rgba(0,0,0,0.12)]">
+                <div className="aspect-[4/3] w-full shrink-0 overflow-hidden bg-muted">
                   {(() => {
                     const firstImage = getFirstProductImage(product);
                     return firstImage ? (
                     <img
                       src={firstImage.url}
                       alt={product.name}
-                      className="h-full w-full object-cover transition-transform hover:scale-105"
+                      className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
                       loading="lazy"
                     />
                   ) : (
@@ -126,22 +126,17 @@ export function CatalogPage() {
                   );
                   })()}
                 </div>
-                <CardHeader className="flex-grow">
-                  <CardTitle className="text-base">
-                    <Link
-                      to={`/catalog/${product.id}`}
-                      className="hover:underline"
-                    >
-                      {product.name}
-                    </Link>
-                  </CardTitle>
+                <CardContent className="flex-grow p-5 space-y-2">
                   {product.category && (
-                    <p className="text-muted-foreground text-sm">
+                    <p className="text-xs font-medium text-primary uppercase tracking-wide">
                       {product.category.name}
                     </p>
                   )}
-                </CardHeader>
-                <CardContent className="space-y-2 pt-0">
+                  <h3 className="font-semibold text-base leading-snug">
+                    <Link to={`/catalog/${product.id}`} className="hover:underline">
+                      {product.name}
+                    </Link>
+                  </h3>
                   {product.variants.slice(0, 2).map((variant) => (
                     <div
                       key={variant.id}
@@ -159,9 +154,14 @@ export function CatalogPage() {
                       {product.variants.length - 2 > 1 ? "s" : ""}
                     </p>
                   )}
-                  <Button variant="outline" size="sm" asChild className="mt-2">
-                    <Link to={`/catalog/${product.id}`}>{t("catalog.view")}</Link>
-                  </Button>
+                  <div className="flex items-center justify-between pt-2">
+                    <span className="text-muted-foreground text-sm">
+                      {product.variants.length} variant{product.variants.length !== 1 ? "s" : ""}
+                    </span>
+                    <Button variant="default" size="sm" asChild className="rounded-lg shadow-sm shadow-primary/20">
+                      <Link to={`/catalog/${product.id}`}>{t("catalog.view")}</Link>
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
             ))}

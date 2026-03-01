@@ -16,6 +16,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import { StatCard } from "@/components/StatCard";
+import { DollarSign, ShoppingCart, Package } from "lucide-react";
 import { formatPrice, getRevenue } from "@/lib/format-currency";
 import { useTranslation } from "@/i18n/useTranslation";
 
@@ -143,20 +145,26 @@ export function SalesByDatePage() {
         </Button>
       </div>
 
-      {!isLoading && rows.length > 0 && (
-        <div className="grid gap-4 sm:grid-cols-3">
-          <div className="rounded-lg border bg-card p-4">
-            <p className="text-muted-foreground text-sm">{t("pages.reports.totalRevenue")}</p>
-            <p className="text-2xl font-bold">{formatPrice(totalRevenue)}</p>
-          </div>
-          <div className="rounded-lg border bg-card p-4">
-            <p className="text-muted-foreground text-sm">{t("pages.reports.totalOrders")}</p>
-            <p className="text-2xl font-bold">{totalOrders}</p>
-          </div>
-          <div className="rounded-lg border bg-card p-4">
-            <p className="text-muted-foreground text-sm">{t("pages.reports.totalUnits")}</p>
-            <p className="text-2xl font-bold">{totalQty}</p>
-          </div>
+      {!isLoading && (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 md:gap-6">
+          <StatCard
+            title={t("pages.reports.totalRevenue")}
+            value={formatPrice(totalRevenue)}
+            icon={DollarSign}
+            color="primary"
+          />
+          <StatCard
+            title={t("pages.reports.totalOrders")}
+            value={String(totalOrders)}
+            icon={ShoppingCart}
+            color="success"
+          />
+          <StatCard
+            title={t("pages.reports.totalUnits")}
+            value={String(totalQty)}
+            icon={Package}
+            color="warning"
+          />
         </div>
       )}
 

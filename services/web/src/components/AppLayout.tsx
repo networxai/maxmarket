@@ -1,10 +1,10 @@
 import type { ReactNode } from "react";
 import { useState } from "react";
-import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
+import { Link, NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/auth-context";
 import { useTranslation } from "@/i18n/useTranslation";
 import { useLogout } from "@/api/hooks";
-import { getNavItemsForRole } from "@/lib/nav-config";
+import { getNavItemsForRole, getSectionLabel } from "@/lib/nav-config";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -13,7 +13,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { Menu, LogOut, User, Globe, ChevronLeft, ChevronRight } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Menu, LogOut, User, Globe, ChevronLeft, ChevronRight, Search, Bell } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Language } from "@/types/api";
 
@@ -23,34 +24,8 @@ const LANGUAGE_OPTIONS: { value: Language; label: string }[] = [
   { value: "ru", label: "Русский" },
 ];
 
-/** Route path -> page title for header breadcrumb. */
-const ROUTE_TITLES: Record<string, string> = {
-  "/": "nav.home",
-  "/catalog": "nav.catalog",
-  "/orders": "nav.orders",
-  "/admin/inventory": "nav.inventory",
-  "/admin/users": "nav.users",
-  "/admin/client-groups": "nav.clientGroups",
-  "/admin/catalog": "nav.catalogAdmin",
-  "/reports": "nav.reports",
-  "/admin/audit": "nav.auditLogs",
-  "/settings": "nav.settings",
-  "/admin/i18n": "nav.translations",
-};
-
-function getPageTitle(pathname: string): string {
-  if (ROUTE_TITLES[pathname]) return ROUTE_TITLES[pathname];
-  if (pathname.startsWith("/catalog/")) return "nav.catalog";
-  if (pathname.startsWith("/orders")) return "nav.orders";
-  if (pathname.startsWith("/reports/")) return "nav.reports";
-  if (pathname.startsWith("/admin/catalog")) return "nav.catalogAdmin";
-  if (pathname.startsWith("/admin/inventory")) return "nav.inventory";
-  return "nav.home";
-}
-
 export function AppLayout({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
-  const location = useLocation();
   const { user, role, logout: clearAuth } = useAuth();
   const { t, language, setLanguage } = useTranslation();
   const logoutMutation = useLogout();
@@ -72,8 +47,6 @@ export function AppLayout({ children }: { children: ReactNode }) {
       return next;
     });
   };
-  const pageTitle = getPageTitle(location.pathname);
-
   const handleLogout = () => {
     logoutMutation.mutate(undefined, {
       onSettled: () => {
@@ -83,28 +56,53 @@ export function AppLayout({ children }: { children: ReactNode }) {
     });
   };
 
+  const groupedBySection = navItems.reduce(
+    (acc, item) => {
+      const sec = item.section ?? "main";
+      if (!acc[sec]) acc[sec] = [];
+      acc[sec].push(item);
+      return acc;
+    },
+    {} as Record<string, typeof navItems>
+  );
+  const sectionOrder = ["main", "management", "reports", "admin"] as const;
+
   const SidebarNav = ({ onLinkClick, collapsed }: { onLinkClick?: () => void; collapsed?: boolean }) => (
-    <nav className="flex flex-1 flex-col gap-1 overflow-y-auto overflow-x-hidden p-2">
-      {navItems.map((item) => {
-        const Icon = item.icon;
+    <nav className="flex flex-1 flex-col overflow-y-auto overflow-x-hidden px-3 py-4 space-y-1">
+      {sectionOrder.map((section, idx) => {
+        const items = groupedBySection[section];
+        if (!items?.length) return null;
         return (
-          <NavLink
-            key={`${item.to}-${item.label}`}
-            to={item.to}
-            onClick={onLinkClick}
-            aria-label={t(item.label)}
-            className={({ isActive }) =>
-              cn(
-                "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-                "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-                isActive && "bg-sidebar-accent text-sidebar-accent-foreground",
-                collapsed && "justify-center px-2"
-              )
-            }
-          >
-            <Icon className="h-4 w-4 shrink-0" />
-            {!collapsed && <span className="truncate">{t(item.label)}</span>}
-          </NavLink>
+          <div key={section} className={cn("space-y-1", idx > 0 && "mt-6")}>
+            {!collapsed && (
+              <p className="px-3 mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+                {t(getSectionLabel(section))}
+              </p>
+            )}
+            {items.map((item) => {
+              const Icon = item.icon;
+              return (
+                <NavLink
+                  key={`${item.to}-${item.label}`}
+                  to={item.to}
+                  onClick={onLinkClick}
+                  aria-label={t(item.label)}
+                  className={({ isActive }) =>
+                    cn(
+                      "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all",
+                      isActive
+                        ? "bg-primary text-white shadow-md shadow-primary/30"
+                        : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+                      collapsed && "justify-center px-2"
+                    )
+                  }
+                >
+                  <Icon className="h-[22px] w-[22px] shrink-0" />
+                  {!collapsed && <span className="truncate">{t(item.label)}</span>}
+                </NavLink>
+              );
+            })}
+          </div>
         );
       })}
     </nav>
@@ -120,9 +118,12 @@ export function AppLayout({ children }: { children: ReactNode }) {
               <Menu className="h-5 w-5" />
             </Button>
           </SheetTrigger>
-          <SheetContent side="left" className="z-[100] w-64 overflow-y-auto overflow-x-hidden border-r bg-sidebar p-0 shadow-xl">
-            <div className="flex h-14 items-center border-b border-sidebar-border px-4">
-              <span className="font-bold text-lg text-sidebar-foreground">MaxMarket</span>
+          <SheetContent side="left" className="z-[100] w-64 overflow-y-auto overflow-x-hidden border-r bg-white p-0 shadow-xl">
+            <div className="flex h-16 items-center gap-2 px-5 border-b border-border/30">
+              <div className="h-7 w-7 shrink-0 rounded-md bg-primary flex items-center justify-center">
+                <span className="text-white font-bold text-sm">M</span>
+              </div>
+              <span className="font-bold text-lg text-foreground">MaxMarket</span>
             </div>
             <div className="pt-4 pb-4">
               <SidebarNav onLinkClick={() => setSidebarOpen(false)} />
@@ -172,23 +173,22 @@ export function AppLayout({ children }: { children: ReactNode }) {
       {/* Desktop: fixed collapsible sidebar (hidden on mobile — use Sheet) */}
       <aside
         className={cn(
-          "fixed left-0 top-0 z-40 hidden h-screen flex-col border-r border-sidebar-border bg-sidebar transition-all duration-300 md:flex",
+          "fixed left-0 top-0 z-40 hidden h-screen flex-col border-r border-border/50 bg-white shadow-sm transition-all duration-300 md:flex",
           sidebarCollapsed ? "md:w-[68px]" : "md:w-64"
         )}
       >
-        <div className="flex h-14 items-center justify-between border-b border-sidebar-border px-4">
-          {!sidebarCollapsed ? (
-            <Link to="/" className="font-bold text-lg text-sidebar-foreground">
-              MaxMarket
-            </Link>
-          ) : (
-            <Link to="/" className="flex items-center justify-center w-full font-bold text-lg text-sidebar-foreground" aria-label={t("nav.home")}>
-              M
-            </Link>
-          )}
+        <div className="flex h-16 items-center gap-2 px-5 border-b border-border/30">
+          <Link to="/" className="flex items-center gap-2 min-w-0">
+            <div className="h-7 w-7 shrink-0 rounded-md bg-primary flex items-center justify-center">
+              <span className="text-white font-bold text-sm">M</span>
+            </div>
+            {!sidebarCollapsed && (
+              <span className="font-bold text-lg text-foreground truncate">MaxMarket</span>
+            )}
+          </Link>
         </div>
         <SidebarNav collapsed={sidebarCollapsed} />
-        <div className="border-t border-sidebar-border p-2">
+        <div className="border-t border-border/50 p-2">
           <Button
             variant="ghost"
             size="icon"
@@ -210,14 +210,23 @@ export function AppLayout({ children }: { children: ReactNode }) {
         )}
       >
         {/* Top header bar (desktop only; mobile uses the top bar above) */}
-        <header className="sticky top-0 z-30 hidden h-14 shrink-0 items-center gap-4 border-b bg-background px-4 md:flex md:px-6">
-          <div className="flex flex-1 items-center gap-4">
-            <h1 className="text-lg font-semibold">{t(pageTitle)}</h1>
+        <header className="sticky top-0 z-30 hidden h-16 shrink-0 items-center gap-4 border-b border-border/30 bg-card px-6 shadow-sm md:flex">
+          <div className="flex flex-1">
+            <div className="relative w-72">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search ⌘K"
+                className="pl-9 bg-muted/50 border-0 rounded-lg h-10"
+              />
+            </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
+            <Button variant="ghost" size="icon" className="rounded-full h-9 w-9 shrink-0" aria-label="Notifications">
+              <Bell className="h-5 w-5 text-muted-foreground" />
+            </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm" className="gap-2">
+                <Button variant="ghost" size="sm" className="gap-2 rounded-lg">
                   <Globe className="h-4 w-4" />
                   {LANGUAGE_OPTIONS.find((o) => o.value === language)?.label ?? language}
                 </Button>
@@ -254,7 +263,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-6">{children}</div>
+        <div className="flex-1 overflow-y-auto overflow-x-hidden bg-background p-4 md:p-6">{children}</div>
       </main>
     </div>
   );

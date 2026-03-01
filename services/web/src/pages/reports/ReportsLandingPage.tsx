@@ -26,7 +26,7 @@ export function ReportsLandingPage() {
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
         {visibleReports.map(({ to, labelKey, icon: Icon }) => (
           <Link key={to} to={to}>
-            <Card className="transition-shadow hover:shadow-md">
+            <Card className="transition-shadow hover:shadow-[0_4px_18px_0_rgba(0,0,0,0.12)]">
               <CardHeader className="flex flex-row items-center gap-2">
                 <Icon className="h-5 w-5" />
                 <span className="font-medium">{t(labelKey)}</span>

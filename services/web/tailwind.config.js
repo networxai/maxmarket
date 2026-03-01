@@ -7,6 +7,9 @@ export default {
   ],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ['"Public Sans"', "sans-serif"],
+      },
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
@@ -53,6 +56,15 @@ export default {
           "accent-foreground": "hsl(var(--sidebar-accent-foreground))",
           border: "hsl(var(--sidebar-border))",
         },
+        success: "hsl(var(--success))",
+        warning: "hsl(var(--warning))",
+        info: "hsl(var(--info))",
+        error: "hsl(var(--error))",
+      },
+      boxShadow: {
+        "material": "0 2px 9px 0 rgba(0,0,0,0.08)",
+        "material-hover": "0 4px 18px 0 rgba(0,0,0,0.12)",
+        "primary-glow": "0 4px 14px 0 hsl(var(--primary) / 0.3)",
       },
     },
   },

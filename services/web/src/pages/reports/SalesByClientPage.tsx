@@ -13,6 +13,8 @@ import {
 import { useReportSalesByClient, useUsers } from "@/api/hooks";
 import { useAuth } from "@/contexts/auth-context";
 import { downloadReportFile, type ReportType } from "@/lib/report-export";
+import { StatCard } from "@/components/StatCard";
+import { DollarSign, ShoppingCart, Package } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -151,6 +153,29 @@ export function SalesByClientPage() {
           {t("actions.exportPdf")}
         </Button>
       </div>
+
+      {!isLoading && (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 md:gap-6">
+          <StatCard
+            title={t("pages.reports.totalRevenue")}
+            value={formatPrice(totalRevenue)}
+            icon={DollarSign}
+            color="primary"
+          />
+          <StatCard
+            title={t("pages.reports.totalOrders")}
+            value={String(totalOrders)}
+            icon={ShoppingCart}
+            color="success"
+          />
+          <StatCard
+            title={t("pages.reports.totalUnits")}
+            value={String(totalQty)}
+            icon={Package}
+            color="warning"
+          />
+        </div>
+      )}
 
       {isLoading ? (
         <Skeleton className="h-[300px] w-full" />

@@ -1,13 +1,13 @@
 import { cn } from "@/lib/utils";
 
 export const STATUS_BADGE_CLASSES: Record<string, string> = {
-  draft: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",
-  submitted: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
-  approved: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
-  fulfilled: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400",
-  rejected: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
-  cancelled: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400",
-  returned: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
+  draft: "bg-slate-100 text-slate-600",
+  submitted: "bg-primary/10 text-primary",
+  approved: "bg-emerald-50 text-emerald-600",
+  fulfilled: "bg-emerald-100 text-emerald-700",
+  rejected: "bg-red-50 text-red-600",
+  cancelled: "bg-amber-50 text-amber-600",
+  returned: "bg-orange-50 text-orange-600",
 };
 
 export const ROLE_BADGE_CLASSES: Record<string, string> = {
@@ -31,7 +31,7 @@ export function StatusBadge({
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium",
+        "inline-flex items-center rounded-md px-2.5 py-1 text-xs font-semibold",
         classes,
         className
       )}
@@ -54,7 +54,7 @@ export function RoleBadge({
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium",
+        "inline-flex items-center rounded-md px-2.5 py-1 text-xs font-semibold",
         classes,
         className
       )}
