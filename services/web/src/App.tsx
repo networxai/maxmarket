@@ -6,7 +6,6 @@ import { I18nProvider } from "@/i18n/I18nProvider";
 import { AppLayout } from "@/components/AppLayout";
 import { Toaster } from "@/components/ui/sonner";
 import { Skeleton } from "@/components/ui/skeleton";
-import { HomePage } from "@/pages/HomePage";
 import { LoginPage } from "@/pages/LoginPage";
 import { CatalogPage } from "@/pages/CatalogPage";
 import { ProductDetailPage } from "@/pages/ProductDetailPage";
@@ -84,7 +83,7 @@ function AppRoutes() {
   return (
     <Suspense fallback={<LoadingSkeleton />}>
     <Routes>
-      <Route path="/" element={<AppLayout><HomePage /></AppLayout>} />
+      <Route path="/" element={<Navigate to="/catalog" replace />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/catalog" element={<AppLayout><CatalogPage /></AppLayout>} />
       <Route path="/catalog/:id" element={<AppLayout><ProductDetailPage /></AppLayout>} />
@@ -108,7 +107,7 @@ function AppRoutes() {
       <Route path="/admin/audit" element={<AppLayout><ProtectedRoute><AdminRouteGuard allowedRoles={["super_admin", "admin"]}><AuditLogsPage /></AdminRouteGuard></ProtectedRoute></AppLayout>} />
       <Route path="/settings" element={<AppLayout><ProtectedRoute><SettingsPage /></ProtectedRoute></AppLayout>} />
       <Route path="/admin/i18n" element={<AppLayout><ProtectedRoute><AdminRouteGuard allowedRoles={["super_admin"]}><I18nAdminPage /></AdminRouteGuard></ProtectedRoute></AppLayout>} />
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route path="*" element={<Navigate to="/catalog" replace />} />
     </Routes>
     </Suspense>
   );

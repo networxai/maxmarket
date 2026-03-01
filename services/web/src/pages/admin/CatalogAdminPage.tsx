@@ -19,6 +19,7 @@ import {
   useDeleteCategory,
 } from "@/api/hooks";
 import { MultilingualInput } from "@/components/MultilingualInput";
+import { ImageUploader } from "@/components/ImageUploader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -30,6 +31,20 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -39,7 +54,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { ApiError } from "@/api/client";
+import { ApiError, apiRequest } from "@/api/client";
 import { formatPrice } from "@/lib/format-currency";
 import type { Product, ProductVariant, Category } from "@/types/api";
 import type { MultilingualString } from "@/types/api";
@@ -386,6 +401,47 @@ function CategoriesTab() {
   );
 }
 
+type LangTab = "en" | "hy" | "ru";
+
+function MultilingualTabs({
+  value,
+  onChange,
+  children,
+}: {
+  value: LangTab;
+  onChange: (v: LangTab) => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-2">
+      <div className="flex gap-1 border-b">
+        <button
+          type="button"
+          onClick={() => onChange("en")}
+          className={`border-b-2 px-3 py-2 text-sm font-medium -mb-px ${value === "en" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}
+        >
+          English *
+        </button>
+        <button
+          type="button"
+          onClick={() => onChange("hy")}
+          className={`border-b-2 px-3 py-2 text-sm font-medium -mb-px ${value === "hy" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}
+        >
+          Armenian
+        </button>
+        <button
+          type="button"
+          onClick={() => onChange("ru")}
+          className={`border-b-2 px-3 py-2 text-sm font-medium -mb-px ${value === "ru" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}
+        >
+          Russian
+        </button>
+      </div>
+      {children}
+    </div>
+  );
+}
+
 export function CreateProductPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -401,6 +457,9 @@ export function CreateProductPage() {
   const [costPrice, setCostPrice] = useState("");
   const [pricePerUnit, setPricePerUnit] = useState("");
   const [pricePerBox, setPricePerBox] = useState("");
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [nameTab, setNameTab] = useState<LangTab>("en");
+  const [descTab, setDescTab] = useState<LangTab>("en");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -443,6 +502,16 @@ export function CreateProductPage() {
           },
         ],
       });
+      if (imageUrl && product.variants[0]) {
+        try {
+          await apiRequest(
+            `/catalog/products/${product.id}/variants/${product.variants[0].id}/images`,
+            { method: "POST", body: JSON.stringify({ url: imageUrl, sortOrder: 0 }) }
+          );
+        } catch {
+          toast.error(t("errors.failedToAddImage"));
+        }
+      }
       toast.success(t("catalogAdmin.productCreated"));
       navigate(`/admin/catalog/products/${product.id}`);
     } catch (err) {
@@ -456,115 +525,167 @@ export function CreateProductPage() {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="max-w-3xl space-y-6">
       <Button variant="ghost" size="sm" onClick={() => navigate("/admin/catalog")}>
         {t("catalogAdmin.backToCatalog")}
       </Button>
       <h1 className="text-2xl font-semibold">{t("catalogAdmin.createProduct")}</h1>
-      <form onSubmit={handleSubmit} className="max-w-2xl space-y-6">
-        <MultilingualInput label={t("catalogAdmin.productName")} value={name} onChange={setName} required />
-        <MultilingualInput
-          label={t("catalogAdmin.productDescription")}
-          value={description}
-          onChange={setDescription}
-          required
-        />
-        <div>
-          <Label>{t("table.category")}</Label>
-          <select
-            value={categoryId}
-            onChange={(e) => setCategoryId(e.target.value)}
-            className="mt-1 flex h-9 w-full rounded-md border border-input bg-background px-3 py-1"
-          >
-            <option value="">{t("common.dash")}</option>
-            {categories.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="rounded border p-4">
-          <h2 className="mb-3 font-medium">{t("catalogAdmin.initialVariant")}</h2>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div>
-              <Label>{t("catalogAdmin.skuRequired")}</Label>
-              <Input value={sku} onChange={(e) => setSku(e.target.value)} required className="mt-1" />
+
+      <form onSubmit={handleSubmit} className="space-y-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">{t("catalogAdmin.basicInfo") ?? "Basic Information"}</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label>{t("catalogAdmin.productName")}</Label>
+              <MultilingualTabs value={nameTab} onChange={setNameTab}>
+                {nameTab === "en" && (
+                  <Input
+                    placeholder="Product name (required)"
+                    value={name.en}
+                    onChange={(e) => setName({ ...name, en: e.target.value })}
+                    required
+                    className="rounded-lg h-11"
+                  />
+                )}
+                {nameTab === "hy" && (
+                  <Input
+                    placeholder="Ապրանքի անուն"
+                    value={name.hy ?? ""}
+                    onChange={(e) => setName({ ...name, hy: e.target.value || null })}
+                    className="rounded-lg h-11"
+                  />
+                )}
+                {nameTab === "ru" && (
+                  <Input
+                    placeholder="Название товара"
+                    value={name.ru ?? ""}
+                    onChange={(e) => setName({ ...name, ru: e.target.value || null })}
+                    className="rounded-lg h-11"
+                  />
+                )}
+              </MultilingualTabs>
             </div>
-            <div>
-              <Label>{t("catalogAdmin.unitType")}</Label>
-              <select
-                value={unitType}
-                onChange={(e) => setUnitType(e.target.value as "piece" | "box" | "kg")}
-                className="mt-1 flex h-9 w-full rounded-md border border-input bg-background px-3 py-1"
-              >
-                {UNIT_TYPES.map((u) => (
-                  <option key={u} value={u}>
-                    {t(`unitTypes.${u}`)}
-                  </option>
-                ))}
-              </select>
+            <div className="space-y-2">
+              <Label>{t("catalogAdmin.productDescription")}</Label>
+              <MultilingualTabs value={descTab} onChange={setDescTab}>
+                {descTab === "en" && (
+                  <textarea
+                    value={description.en}
+                    onChange={(e) => setDescription({ ...description, en: e.target.value })}
+                    placeholder="Description (optional)"
+                    rows={3}
+                    className="flex w-full rounded-lg border border-input bg-transparent px-4 py-2 text-sm"
+                  />
+                )}
+                {descTab === "hy" && (
+                  <textarea
+                    value={description.hy ?? ""}
+                    onChange={(e) => setDescription({ ...description, hy: e.target.value || null })}
+                    placeholder="Նկարագրություն"
+                    rows={3}
+                    className="flex w-full rounded-lg border border-input bg-transparent px-4 py-2 text-sm"
+                  />
+                )}
+                {descTab === "ru" && (
+                  <textarea
+                    value={description.ru ?? ""}
+                    onChange={(e) => setDescription({ ...description, ru: e.target.value || null })}
+                    placeholder="Описание"
+                    rows={3}
+                    className="flex w-full rounded-lg border border-input bg-transparent px-4 py-2 text-sm"
+                  />
+                )}
+              </MultilingualTabs>
             </div>
-            <div>
-              <Label>{t("catalogAdmin.minOrderQty")}</Label>
-              <Input
-                type="number"
-                min={1}
-                value={minOrderQty}
-                onChange={(e) => setMinOrderQty(Number(e.target.value) || 1)}
-                className="mt-1"
-              />
+            <div className="space-y-2">
+              <Label>{t("table.category")}</Label>
+              <Select value={categoryId || "none"} onValueChange={(v) => setCategoryId(v === "none" ? "" : v)}>
+                <SelectTrigger className="rounded-lg h-11">
+                  <SelectValue placeholder={t("common.selectCategory") ?? "Select category"} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">{t("common.dash")}</SelectItem>
+                  {categories.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-            <div>
-              <Label>{t("catalogAdmin.costPrice")}</Label>
-              <div className="flex items-center gap-2">
-                <Input
-                  type="number"
-                  min={0}
-                  step={0.01}
-                  value={costPrice}
-                  onChange={(e) => setCostPrice(e.target.value)}
-                  className="mt-1"
-                />
-                <span className="text-muted-foreground text-sm">֏</span>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">{t("catalogAdmin.initialVariant")}</CardTitle>
+            <CardDescription>{t("catalogAdmin.initialVariantDesc") ?? "Define the first product variant with pricing"}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>{t("catalogAdmin.skuRequired")}</Label>
+                <Input placeholder="e.g. BEV-WATER-1L" value={sku} onChange={(e) => setSku(e.target.value)} required className="rounded-lg h-11" />
+              </div>
+              <div className="space-y-2">
+                <Label>{t("catalogAdmin.unitType")}</Label>
+                <Select value={unitType} onValueChange={(v) => setUnitType(v as "piece" | "box" | "kg")}>
+                  <SelectTrigger className="rounded-lg h-11">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {UNIT_TYPES.map((u) => (
+                      <SelectItem key={u} value={u}>
+                        {t(`unitTypes.${u}`)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>{t("catalogAdmin.minOrderQty")}</Label>
+                <Input type="number" min={1} value={minOrderQty} onChange={(e) => setMinOrderQty(Number(e.target.value) || 1)} className="rounded-lg h-11" />
+              </div>
+              <div className="space-y-2">
+                <Label>{t("catalogAdmin.costPrice")} ֏</Label>
+                <Input type="number" min={0} step={0.01} value={costPrice} onChange={(e) => setCostPrice(e.target.value)} className="rounded-lg h-11" />
+              </div>
+              <div className="space-y-2">
+                <Label>{t("catalogAdmin.pricePerUnit")} ֏</Label>
+                <Input type="number" min={0} step={0.01} value={pricePerUnit} onChange={(e) => setPricePerUnit(e.target.value)} className="rounded-lg h-11" />
+              </div>
+              <div className="space-y-2">
+                <Label>{t("catalogAdmin.pricePerBox")} ֏ ({t("common.optional") ?? "optional"})</Label>
+                <Input type="number" min={0} step={0.01} value={pricePerBox} onChange={(e) => setPricePerBox(e.target.value)} className="rounded-lg h-11" />
               </div>
             </div>
-            <div>
-              <Label>{t("catalogAdmin.pricePerUnit")}</Label>
-              <div className="flex items-center gap-2">
-                <Input
-                  type="number"
-                  min={0}
-                  step={0.01}
-                  value={pricePerUnit}
-                  onChange={(e) => setPricePerUnit(e.target.value)}
-                  className="mt-1"
-                />
-                <span className="text-muted-foreground text-sm">֏</span>
-              </div>
-            </div>
-            <div>
-              <Label>{t("catalogAdmin.pricePerBox")}</Label>
-              <div className="flex items-center gap-2">
-                <Input
-                  type="number"
-                  min={0}
-                  step={0.01}
-                  value={pricePerBox}
-                  onChange={(e) => setPricePerBox(e.target.value)}
-                  className="mt-1"
-                />
-                <span className="text-muted-foreground text-sm">֏</span>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div className="flex gap-2">
-          <Button type="submit" disabled={createMutation.isPending}>
-            {t("catalogAdmin.createProduct")}
-          </Button>
-          <Button type="button" variant="outline" onClick={() => navigate("/admin/catalog")}>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">{t("catalogAdmin.productImage") ?? "Product Image"}</CardTitle>
+            <CardDescription>{t("catalogAdmin.productImageDesc") ?? "Upload a product image (auto-resized to 800×800, compressed)"}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ImageUploader
+              onImageReady={(url) => setImageUrl(url)}
+              onClear={() => setImageUrl(null)}
+              maxWidth={800}
+              maxHeight={800}
+              quality={0.8}
+            />
+          </CardContent>
+        </Card>
+
+        <div className="flex justify-end gap-3">
+          <Button type="button" variant="outline" onClick={() => navigate(-1)} className="rounded-lg">
             {t("common.cancel")}
+          </Button>
+          <Button type="submit" disabled={createMutation.isPending} className="rounded-lg shadow-md shadow-primary/30">
+            {t("catalogAdmin.createProduct")}
           </Button>
         </div>
       </form>

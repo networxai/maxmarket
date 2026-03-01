@@ -150,7 +150,6 @@ export function InventoryAdminPage() {
               <thead>
                 <tr className="border-b bg-muted/50">
                   <th className="px-4 py-2 text-left font-medium">{t("table.variantSku")}</th>
-                  <th className="hidden px-4 py-2 text-left font-medium md:table-cell">{t("inventory.warehouseId")}</th>
                   <th className="px-4 py-2 text-right font-medium">{t("inventory.available")}</th>
                   <th className="px-4 py-2 text-right font-medium">{t("inventory.reserved")}</th>
                   <th className="px-4 py-2 text-right font-medium">{t("inventory.free")}</th>
@@ -168,9 +167,6 @@ export function InventoryAdminPage() {
                       ) : (
                         <span className="font-mono">{row.sku}</span>
                       )}
-                    </td>
-                    <td className="hidden px-4 py-2 font-mono text-muted-foreground text-xs md:table-cell" title={row.warehouseId}>
-                      {row.warehouseId.slice(0, 8)}…
                     </td>
                     <td className="px-4 py-2 text-right">{row.availableQty}</td>
                     <td className="px-4 py-2 text-right">{row.reservedQty}</td>

@@ -17,7 +17,7 @@ export function AdminRouteGuard({ children, allowedRoles }: AdminRouteGuardProps
   }
 
   if (!allowedRoles.includes(role)) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/catalog" replace />;
   }
 
   return <>{children}</>;

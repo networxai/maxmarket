@@ -19,7 +19,7 @@ export function LoginPage() {
 
   useEffect(() => {
     if (isAuthenticated) {
-      navigate("/", { replace: true });
+      navigate("/catalog", { replace: true });
     }
   }, [isAuthenticated, navigate]);
 
@@ -34,7 +34,7 @@ export function LoginPage() {
       {
         onSuccess: (data) => {
           login(data.accessToken, data.user);
-          navigate("/", { replace: true });
+          navigate("/catalog", { replace: true });
         },
         onError: (error) => {
           const msg =

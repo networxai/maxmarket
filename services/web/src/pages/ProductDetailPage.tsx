@@ -1,49 +1,20 @@
 import { useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useProduct } from "@/api/hooks";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { formatPrice } from "@/lib/format-currency";
 import { cn } from "@/lib/utils";
-import type { ProductVariant, PublicProductVariant } from "@/types/api";
-
-function VariantRow({ variant }: { variant: ProductVariant | PublicProductVariant }) {
-  const v = variant as ProductVariant;
-  const hasAnyPrice =
-    v.costPrice != null ||
-    v.pricePerUnit != null ||
-    v.pricePerBox != null ||
-    v.clientPrice != null;
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-2 border-b py-3 last:border-0">
-      <div className="flex items-center gap-2">
-        <span className="font-mono text-sm">{variant.sku}</span>
-        <span className="text-muted-foreground text-sm">
-          {variant.unitType} · min {variant.minOrderQty}
-        </span>
-      </div>
-      {hasAnyPrice ? (
-        <div className="text-sm">
-          {v.clientPrice != null && (
-            <span className="mr-2">Client: {formatPrice(v.clientPrice)}</span>
-          )}
-          {v.pricePerUnit != null && (
-            <span className="mr-2">Unit: {formatPrice(v.pricePerUnit)}</span>
-          )}
-          {v.pricePerBox != null && (
-            <span className="mr-2">Box: {formatPrice(v.pricePerBox)}</span>
-          )}
-          {v.costPrice != null && (
-            <span className="text-muted-foreground">Cost: {formatPrice(v.costPrice)}</span>
-          )}
-        </div>
-      ) : (
-        <span className="text-muted-foreground text-sm">—</span>
-      )}
-    </div>
-  );
-}
+import type { ProductVariant } from "@/types/api";
 
 function ProductImageGallery({
   images,
@@ -110,47 +81,82 @@ export function ProductDetailPage() {
     );
   }
 
+  const allImages = product.variants.flatMap(
+    (v) => (v as ProductVariant).images ?? []
+  );
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div className="flex items-center gap-2">
         <Button variant="ghost" size="sm" asChild>
           <Link to="/catalog">← Catalog</Link>
         </Button>
       </div>
+
       <Card>
-        <CardHeader>
-          <h1 className="text-2xl font-semibold">{product.name}</h1>
-          {product.description && (
-            <p className="text-muted-foreground">{product.description}</p>
-          )}
-          {product.category && (
-            <p className="text-sm text-muted-foreground">
-              Category: {product.category.name}
-            </p>
-          )}
-        </CardHeader>
-        <CardContent>
-          <h2 className="mb-2 font-medium">Variants</h2>
-          <div className="divide-y">
-            {product.variants.map((variant) => (
-              <VariantRow key={variant.id} variant={variant} />
-            ))}
-          </div>
-          {(() => {
-            const allImages = product.variants.flatMap(
-              (v) => (v as ProductVariant).images ?? []
-            );
-            if (!allImages.length) return null;
-            return (
-              <div className="mt-4">
-                <h2 className="mb-2 font-medium">Images</h2>
+        <CardContent className="p-6">
+          <div className="flex flex-col gap-6 lg:flex-row">
+            {allImages.length > 0 ? (
+              <div className="w-full shrink-0 lg:w-80">
                 <ProductImageGallery
                   images={allImages}
                   productName={product.name}
                 />
               </div>
-            );
-          })()}
+            ) : (
+              <div className="flex h-48 w-full shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground text-sm lg:w-80">
+                No image
+              </div>
+            )}
+            <div className="flex-1 space-y-4">
+              <div>
+                <h1 className="text-2xl font-bold">{product.name}</h1>
+                {product.description && (
+                  <p className="mt-1 text-muted-foreground">{product.description}</p>
+                )}
+                {product.category && (
+                  <span className="mt-2 inline-block rounded-md bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
+                    {product.category.name}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="p-0">
+          <div className="px-6 pt-6">
+            <h2 className="text-lg font-semibold">Variants</h2>
+          </div>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>SKU</TableHead>
+                <TableHead>Unit Type</TableHead>
+                <TableHead>Min Order</TableHead>
+                <TableHead>Selling Price (per unit)</TableHead>
+                <TableHead>Selling Price (per box)</TableHead>
+                <TableHead className="text-muted-foreground">Cost Price</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {product.variants.map((variant) => {
+                const v = variant as ProductVariant;
+                return (
+                  <TableRow key={variant.id}>
+                    <TableCell className="font-mono font-medium">{variant.sku}</TableCell>
+                    <TableCell>{variant.unitType}</TableCell>
+                    <TableCell>{variant.minOrderQty}</TableCell>
+                    <TableCell>{(v.pricePerUnit ?? v.clientPrice) != null ? formatPrice(v.pricePerUnit ?? v.clientPrice!) : "—"}</TableCell>
+                    <TableCell>{v.pricePerBox != null ? formatPrice(v.pricePerBox) : "—"}</TableCell>
+                    <TableCell className="text-muted-foreground">{v.costPrice != null ? formatPrice(v.costPrice) : "—"}</TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
         </CardContent>
       </Card>
     </div>

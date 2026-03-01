@@ -1,41 +1,152 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useProducts, useCategories } from "@/api/hooks";
 import { useTranslation } from "@/i18n/useTranslation";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatPrice } from "@/lib/format-currency";
 import type { ProductListItem, ProductVariant, PublicProductVariant } from "@/types/api";
+import { LayoutGrid, Grid3X3, Columns3, Search } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 /** First image from first variant, or null. */
 function getFirstProductImage(product: ProductListItem) {
   return product.variants?.[0]?.images?.[0];
 }
 
-function VariantPrices({ variant }: { variant: ProductVariant | PublicProductVariant }) {
+function VariantPrices({ variant, compact }: { variant: ProductVariant | PublicProductVariant; compact?: boolean }) {
   const v = variant as ProductVariant;
   const hasAnyPrice =
     v.costPrice != null ||
     v.pricePerUnit != null ||
     v.pricePerBox != null ||
     v.clientPrice != null;
-  if (!hasAnyPrice) return <span className="text-muted-foreground text-sm">—</span>;
+  if (!hasAnyPrice) return <span className={cn("text-muted-foreground", compact ? "text-xs" : "text-sm")}>—</span>;
   const parts: string[] = [];
   if (v.clientPrice != null) parts.push(`Client: ${formatPrice(v.clientPrice)}`);
   if (v.pricePerUnit != null) parts.push(`Unit: ${formatPrice(v.pricePerUnit)}`);
   if (v.pricePerBox != null) parts.push(`Box: ${formatPrice(v.pricePerBox)}`);
   if (v.costPrice != null) parts.push(`Cost: ${formatPrice(v.costPrice)}`);
-  return <span className="text-sm">{parts.join(" · ")}</span>;
+  return <span className={compact ? "text-xs" : "text-sm"}>{parts.join(" · ")}</span>;
 }
+
+function ProductCard({
+  product,
+  compact,
+  t,
+}: {
+  product: ProductListItem;
+  compact: boolean;
+  t: (k: string) => string;
+}) {
+  const firstImage = getFirstProductImage(product);
+  const showVariants = compact ? 1 : 2;
+  return (
+    <Card className="flex flex-col overflow-hidden group cursor-pointer transition-shadow hover:shadow-[0_4px_18px_0_rgba(0,0,0,0.12)]">
+      <div
+        className={cn(
+          "w-full shrink-0 overflow-hidden bg-muted",
+          compact ? "aspect-[3/2]" : "aspect-[4/3]"
+        )}
+      >
+        {firstImage ? (
+          <img
+            src={firstImage.url}
+            alt={product.name}
+            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+            loading="lazy"
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center text-muted-foreground text-sm">
+            {t("catalog.noImage")}
+          </div>
+        )}
+      </div>
+      <CardContent className={cn("flex-grow space-y-2", compact ? "p-3" : "p-5")}>
+        {product.category && (
+          <p
+            className={cn(
+              "font-medium text-primary uppercase tracking-wide",
+              compact ? "text-[10px]" : "text-xs"
+            )}
+          >
+            {product.category.name}
+          </p>
+        )}
+        <h3
+          className={cn(
+            "font-semibold leading-snug",
+            compact ? "text-sm" : "text-base"
+          )}
+        >
+          <Link to={`/catalog/${product.id}`} className="hover:underline">
+            {product.name}
+          </Link>
+        </h3>
+        {product.variants.slice(0, showVariants).map((variant) => (
+          <div
+            key={variant.id}
+            className={cn("flex items-center justify-between", compact ? "text-xs" : "text-sm")}
+          >
+            <span className="font-mono text-muted-foreground">{variant.sku}</span>
+            <VariantPrices variant={variant} compact={compact} />
+          </div>
+        ))}
+        {product.variants.length > showVariants && (
+          <p className={cn("text-muted-foreground", compact ? "text-[10px]" : "text-xs")}>
+            +{product.variants.length - showVariants} more
+          </p>
+        )}
+        <div className={cn("flex items-center justify-between", compact ? "pt-1" : "pt-2")}>
+          <span
+            className={cn(
+              "text-muted-foreground",
+              compact ? "text-[10px]" : "text-sm"
+            )}
+          >
+            {product.variants.length} var.
+          </span>
+          <Button variant="default" size="sm" asChild className="rounded-lg shadow-sm shadow-primary/20">
+            <Link to={`/catalog/${product.id}`}>{t("catalog.view")}</Link>
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+type GridCols = 3 | 4 | 5;
 
 export function CatalogPage() {
   const { t } = useTranslation();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState<string>("");
+  const [gridCols, setGridCols] = useState<GridCols>(() => {
+    try {
+      const saved = localStorage.getItem("catalog-grid-cols");
+      const n = saved ? parseInt(saved, 10) : 4;
+      return (n >= 3 && n <= 5 ? n : 4) as GridCols;
+    } catch {
+      return 4;
+    }
+  });
   const pageSize = 20;
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("catalog-grid-cols", String(gridCols));
+    } catch {}
+  }, [gridCols]);
 
   const { data: productsData, isLoading, isError, error } = useProducts({
     page,
@@ -53,34 +164,72 @@ export function CatalogPage() {
     );
   }
 
+  const categoryFilter = category || "all";
+
   return (
     <div className="flex flex-col gap-4 md:gap-6">
-      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-        <Input
-          placeholder={t("catalog.search")}
-          value={search}
-          onChange={(e) => {
-            setSearch(e.target.value);
+      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+        <div className="relative flex-1 w-full sm:max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder={t("filters.searchProducts")}
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
+            className="pl-9 h-10 rounded-lg bg-card border-border/70"
+          />
+        </div>
+        <Select
+          value={categoryFilter}
+          onValueChange={(v) => {
+            setCategory(v === "all" ? "" : v);
             setPage(1);
           }}
-          className="w-full sm:max-w-xs"
-        />
-        <select
-          value={category}
-          onChange={(e) => {
-            setCategory(e.target.value);
-            setPage(1);
-          }}
-          className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm sm:w-auto"
           disabled={categoriesLoading}
         >
-          <option value="">All categories</option>
-          {categories.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
+          <SelectTrigger className="w-full sm:w-48 h-10 rounded-lg bg-card border-border/70">
+            <SelectValue placeholder={t("filters.allCategories")} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">{t("filters.allCategories")}</SelectItem>
+            {categories.map((c) => (
+              <SelectItem key={c.id} value={c.id}>
+                {c.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <div className="flex items-center gap-1 ml-auto" role="group" aria-label={t("catalog.gridSize") ?? "Grid size"}>
+          <Button
+            variant={gridCols === 3 ? "default" : "ghost"}
+            size="icon"
+            className="h-8 w-8"
+            onClick={() => setGridCols(3)}
+            aria-label="3 columns"
+          >
+            <Grid3X3 className="h-4 w-4" />
+          </Button>
+          <Button
+            variant={gridCols === 4 ? "default" : "ghost"}
+            size="icon"
+            className="h-8 w-8"
+            onClick={() => setGridCols(4)}
+            aria-label="4 columns"
+          >
+            <LayoutGrid className="h-4 w-4" />
+          </Button>
+          <Button
+            variant={gridCols === 5 ? "default" : "ghost"}
+            size="icon"
+            className="h-8 w-8"
+            onClick={() => setGridCols(5)}
+            aria-label="5 columns"
+          >
+            <Columns3 className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
 
       {isLoading ? (
@@ -106,64 +255,21 @@ export function CatalogPage() {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3">
+          <div
+            className={cn(
+              "grid gap-4 sm:gap-6",
+              gridCols === 3 && "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3",
+              gridCols === 4 && "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4",
+              gridCols === 5 && "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5"
+            )}
+          >
             {productsData.data.map((product: ProductListItem) => (
-              <Card key={product.id} className="flex flex-col overflow-hidden group cursor-pointer transition-shadow hover:shadow-[0_4px_18px_0_rgba(0,0,0,0.12)]">
-                <div className="aspect-[4/3] w-full shrink-0 overflow-hidden bg-muted">
-                  {(() => {
-                    const firstImage = getFirstProductImage(product);
-                    return firstImage ? (
-                    <img
-                      src={firstImage.url}
-                      alt={product.name}
-                      className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                      loading="lazy"
-                    />
-                  ) : (
-                    <div className="flex h-full w-full items-center justify-center text-muted-foreground text-sm">
-                      {t("catalog.noImage")}
-                    </div>
-                  );
-                  })()}
-                </div>
-                <CardContent className="flex-grow p-5 space-y-2">
-                  {product.category && (
-                    <p className="text-xs font-medium text-primary uppercase tracking-wide">
-                      {product.category.name}
-                    </p>
-                  )}
-                  <h3 className="font-semibold text-base leading-snug">
-                    <Link to={`/catalog/${product.id}`} className="hover:underline">
-                      {product.name}
-                    </Link>
-                  </h3>
-                  {product.variants.slice(0, 2).map((variant) => (
-                    <div
-                      key={variant.id}
-                      className="flex items-center justify-between text-sm"
-                    >
-                      <span className="font-mono text-muted-foreground">
-                        {variant.sku}
-                      </span>
-                      <VariantPrices variant={variant} />
-                    </div>
-                  ))}
-                  {product.variants.length > 2 && (
-                    <p className="text-muted-foreground text-xs">
-                      +{product.variants.length - 2} more variant
-                      {product.variants.length - 2 > 1 ? "s" : ""}
-                    </p>
-                  )}
-                  <div className="flex items-center justify-between pt-2">
-                    <span className="text-muted-foreground text-sm">
-                      {product.variants.length} variant{product.variants.length !== 1 ? "s" : ""}
-                    </span>
-                    <Button variant="default" size="sm" asChild className="rounded-lg shadow-sm shadow-primary/20">
-                      <Link to={`/catalog/${product.id}`}>{t("catalog.view")}</Link>
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
+              <ProductCard
+                key={product.id}
+                product={product}
+                compact={gridCols >= 4}
+                t={t}
+              />
             ))}
           </div>
 
