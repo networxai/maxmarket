@@ -55,16 +55,16 @@ function orderTotal(order: Order): number {
 
 function StatusBadge({ status, t }: { status: Order["status"]; t: (k: string) => string }) {
   const variant: Record<Order["status"], string> = {
-    draft: "bg-muted text-muted-foreground",
-    submitted: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400",
-    approved: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
-    fulfilled: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
-    rejected: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
-    cancelled: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300",
-    returned: "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400",
+    draft: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",
+    submitted: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
+    approved: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+    fulfilled: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400",
+    rejected: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
+    cancelled: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400",
+    returned: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
   };
   return (
-    <span className={cn("rounded px-2 py-0.5 text-xs font-medium", variant[status])}>
+    <span className={cn("inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium", variant[status])}>
       {t(`orders.status.${status}`)}
     </span>
   );
@@ -122,7 +122,7 @@ export function OrdersPage() {
     deleteOrder.mutate(deleteOrderId, {
       onSuccess: () => {
         setDeleteOrderId(null);
-        toast.success("Draft deleted");
+        toast.success(t("orders.draftDeleted"));
         navigate("/orders");
       },
       onError: (e) => {
@@ -143,9 +143,12 @@ export function OrdersPage() {
   const pagination = ordersData?.pagination;
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <h1 className="text-2xl font-semibold">{role === "client" ? t("orders.myOrders") : t("orders.orders")}</h1>
+    <div className="flex flex-col gap-4 md:gap-6">
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-2xl font-bold tracking-tight">{role === "client" ? t("orders.myOrders") : t("orders.orders")}</h2>
+          <p className="text-muted-foreground text-sm">{t("pages.orders.description")}</p>
+        </div>
         {showNewOrder && (
           <Button asChild>
             <Link to="/orders/new">{t("orders.newOrder")}</Link>
@@ -153,10 +156,10 @@ export function OrdersPage() {
         )}
       </div>
 
-      <div className="flex flex-wrap items-center gap-4">
+      <div className="flex flex-col flex-wrap gap-2 sm:flex-row sm:items-center">
         <Select value={status || "all"} onValueChange={(v) => { setStatus(v === "all" ? "" : v); setPage(1); }}>
-          <SelectTrigger className="w-[160px]">
-            <SelectValue placeholder="Status" />
+          <SelectTrigger className="w-full sm:w-[160px]">
+            <SelectValue placeholder={t("table.status")} />
           </SelectTrigger>
           <SelectContent>
             {statusOptions.map((opt) => (
@@ -168,25 +171,25 @@ export function OrdersPage() {
         </Select>
         <Input
           type="date"
-          placeholder="From"
+          placeholder={t("filters.from")}
           value={dateFrom}
           onChange={(e) => { setDateFrom(e.target.value); setPage(1); }}
-          className="w-[140px]"
+          className="w-full sm:w-[140px]"
         />
         <Input
           type="date"
-          placeholder="To"
+          placeholder={t("filters.to")}
           value={dateTo}
           onChange={(e) => { setDateTo(e.target.value); setPage(1); }}
-          className="w-[140px]"
+          className="w-full sm:w-[140px]"
         />
         {canFilterClient && (role === "admin" || role === "super_admin") && clientsData?.data && (
           <Select value={clientId || "all"} onValueChange={(v) => { setClientId(v === "all" ? "" : v); setPage(1); }}>
-            <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="Client" />
+            <SelectTrigger className="w-full sm:w-[180px]">
+              <SelectValue placeholder={t("table.client")} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All clients</SelectItem>
+              <SelectItem value="all">{t("filters.allClients")}</SelectItem>
               {clientsData.data.map((u: { id: string; fullName: string }) => (
                 <SelectItem key={u.id} value={u.id}>{u.fullName}</SelectItem>
               ))}
@@ -195,19 +198,19 @@ export function OrdersPage() {
         )}
         {canFilterClient && role === "manager" && (
           <Input
-            placeholder="Client ID (UUID)"
+            placeholder={t("filters.clientIdPlaceholder")}
             value={clientId}
             onChange={(e) => { setClientId(e.target.value); setPage(1); }}
-            className="w-[220px]"
+            className="w-full sm:w-[220px]"
           />
         )}
         {canFilterAgent && agentsData?.data && (
           <Select value={agentId || "all"} onValueChange={(v) => { setAgentId(v === "all" ? "" : v); setPage(1); }}>
-            <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="Agent" />
+            <SelectTrigger className="w-full sm:w-[180px]">
+              <SelectValue placeholder={t("table.agent")} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All agents</SelectItem>
+              <SelectItem value="all">{t("filters.allAgents")}</SelectItem>
               {agentsData.data.map((u: { id: string; fullName: string }) => (
                 <SelectItem key={u.id} value={u.id}>{u.fullName}</SelectItem>
               ))}
@@ -217,53 +220,65 @@ export function OrdersPage() {
       </div>
 
       {isLoading ? (
-        <div className="space-y-2">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <Skeleton key={i} className="h-12 w-full" />
-          ))}
+        <div className="rounded-lg border bg-card p-6">
+          <div className="space-y-3">
+            <Skeleton className="h-8 w-48" />
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+          </div>
         </div>
       ) : orders.length === 0 ? (
-        <div className="rounded-lg border bg-muted/50 p-8 text-center text-muted-foreground">
-          {t("common.noOrders")}
+        <div className="rounded-lg border bg-card py-12">
+          <div className="flex flex-col items-center justify-center text-center">
+            <p className="text-lg font-semibold">{t("common.noOrders")}</p>
+            <p className="mt-1 text-sm text-muted-foreground">{t("pages.orders.noOrdersMatch")}</p>
+          </div>
         </div>
       ) : (
         <>
-          <div className="overflow-x-auto rounded-md border">
-            <table className="w-full text-sm">
+          <div className="rounded-lg border bg-card">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[640px] text-sm">
               <thead>
                 <tr className="border-b bg-muted/50">
-                  <th className="px-4 py-2 text-left font-medium">Order</th>
-                  <th className="px-4 py-2 text-left font-medium">Client</th>
-                  {role !== "client" && <th className="px-4 py-2 text-left font-medium">Agent</th>}
-                  <th className="px-4 py-2 text-left font-medium">Status</th>
-                  <th className="px-4 py-2 text-right font-medium">Items</th>
-                  <th className="px-4 py-2 text-right font-medium">Total</th>
-                  <th className="px-4 py-2 text-left font-medium">Created</th>
-                  {role !== "client" && <th className="px-4 py-2 text-right font-medium">Actions</th>}
+                  <th className="px-4 py-2 text-left font-medium">{t("table.order")}</th>
+                  <th className="px-4 py-2 text-left font-medium">{t("table.client")}</th>
+                  {role !== "client" && <th className="hidden px-4 py-2 text-left font-medium md:table-cell">{t("table.agent")}</th>}
+                  <th className="px-4 py-2 text-left font-medium">{t("table.status")}</th>
+                  <th className="px-4 py-2 text-right font-medium">{t("table.items")}</th>
+                  <th className="px-4 py-2 text-right font-medium">{t("table.total")}</th>
+                  <th className="hidden px-4 py-2 text-left font-medium md:table-cell">{t("table.created")}</th>
+                  {role !== "client" && <th className="px-4 py-2 text-right font-medium">{t("table.actions")}</th>}
                 </tr>
               </thead>
               <tbody>
                 {orders.map((order) => (
-                  <tr key={order.id} className="border-b hover:bg-muted/30">
-                    <td className="px-4 py-2">
+                  <tr
+                    key={order.id}
+                    className="cursor-pointer border-b transition-colors hover:bg-muted/50"
+                    onClick={() => navigate(`/orders/${order.id}`)}
+                  >
+                    <td className="px-4 py-2" onClick={(e) => e.stopPropagation()}>
                       <Link to={`/orders/${order.id}`} className="font-medium text-primary hover:underline">
                         {order.orderNumber}
                       </Link>
                     </td>
                     <td className="px-4 py-2">{displayName(order.clientName ?? clientMap.get(order.clientId), order.clientId)}</td>
                     {role !== "client" && (
-                      <td className="px-4 py-2">{displayName(order.agentName ?? agentMap.get(order.agentId ?? ""), order.agentId)}</td>
+                      <td className="hidden px-4 py-2 md:table-cell">{displayName(order.agentName ?? agentMap.get(order.agentId ?? ""), order.agentId)}</td>
                     )}
                     <td className="px-4 py-2"><StatusBadge status={order.status} t={t} /></td>
                     <td className="px-4 py-2 text-right">{order.lineItems.length}</td>
                     <td className="px-4 py-2 text-right">{formatPrice(orderTotal(order))}</td>
-                    <td className="px-4 py-2">{formatDate(order.createdAt)}</td>
+                    <td className="hidden px-4 py-2 md:table-cell">{formatDate(order.createdAt)}</td>
                     {role !== "client" && (
-                      <td className="px-4 py-2 text-right">
+                      <td className="px-4 py-2 text-right" onClick={(e) => e.stopPropagation()}>
                         {order.status === "draft" && role === "agent" && user?.id === order.agentId && (
                           <>
                             <Button variant="link" size="sm" asChild className="p-0 h-auto">
-                              <Link to={`/orders/${order.id}/edit`}>Edit</Link>
+                              <Link to={`/orders/${order.id}/edit`}>{t("common.edit")}</Link>
                             </Button>
                             <span className="mx-1">|</span>
                             <Button
@@ -272,23 +287,23 @@ export function OrdersPage() {
                               className="p-0 h-auto text-destructive"
                               onClick={() => setDeleteOrderId(order.id)}
                             >
-                              Delete
+                              {t("common.delete")}
                             </Button>
                           </>
                         )}
                         {order.status === "submitted" && role === "manager" && (
                           <Button variant="link" size="sm" asChild className="p-0 h-auto">
-                            <Link to={`/orders/${order.id}`}>Review</Link>
+                            <Link to={`/orders/${order.id}`}>{t("orders.review")}</Link>
                           </Button>
                         )}
                         {order.status === "approved" && role === "manager" && (
                           <Button variant="link" size="sm" asChild className="p-0 h-auto">
-                            <Link to={`/orders/${order.id}`}>Fulfill / Cancel</Link>
+                            <Link to={`/orders/${order.id}`}>{t("orders.fulfillCancel")}</Link>
                           </Button>
                         )}
                         {order.status === "approved" && (role === "admin" || role === "super_admin") && (
                           <Button variant="link" size="sm" asChild className="p-0 h-auto">
-                            <Link to={`/orders/${order.id}/version-edit`}>Edit (New Version)</Link>
+                            <Link to={`/orders/${order.id}/version-edit`}>{t("orders.editNewVersion")}</Link>
                           </Button>
                         )}
                       </td>
@@ -297,15 +312,20 @@ export function OrdersPage() {
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
 
           {pagination && pagination.totalPages > 1 && (
             <div className="flex items-center justify-center gap-2">
               <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
-                Previous
+                {t("common.previous")}
               </Button>
               <span className="text-sm text-muted-foreground">
-                Page {pagination.page} of {pagination.totalPages} ({pagination.totalCount} total)
+                {t("common.pageOfWithTotal", {
+                  page: pagination.page,
+                  total: pagination.totalPages,
+                  totalCount: pagination.totalCount,
+                })}
               </span>
               <Button
                 variant="outline"
@@ -313,7 +333,7 @@ export function OrdersPage() {
                 disabled={page >= pagination.totalPages}
                 onClick={() => setPage((p) => p + 1)}
               >
-                Next
+                {t("common.next")}
               </Button>
             </div>
           )}
@@ -323,15 +343,15 @@ export function OrdersPage() {
       <AlertDialog open={!!deleteOrderId} onOpenChange={(open) => !open && setDeleteOrderId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete draft?</AlertDialogTitle>
+            <AlertDialogTitle>{t("orders.deleteDraftTitle")}</AlertDialogTitle>
             <AlertDialogDescription>
-              Delete this draft? This cannot be undone.
+              {t("orders.deleteDraftDesc")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
             <AlertDialogAction onClick={handleDeleteConfirm} disabled={deleteOrder.isPending} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              Delete
+              {t("common.delete")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

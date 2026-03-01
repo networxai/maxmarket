@@ -59,13 +59,13 @@ export function I18nAdminPage() {
       toast.success(t("i18n.translationsSaved"));
       void refetch();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to save");
+      toast.error(err instanceof Error ? err.message : t("errors.failedToSave"));
     }
   };
 
   const handleAddKey = () => {
     if (!newKey.trim()) {
-      toast.error("Key is required");
+      toast.error(t("common.keyRequired"));
       return;
     }
     setEdited((prev) => ({ ...prev, [newKey.trim()]: newValue }));
@@ -95,29 +95,29 @@ export function I18nAdminPage() {
           ))}
         </div>
         <Input
-          placeholder="Filter keys…"
+          placeholder={t("i18n.filterKeys")}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="max-w-xs"
         />
         <Button variant="outline" size="sm" onClick={() => setAddKeyOpen(true)}>
-          Add Key
+          {t("i18n.addKey")}
         </Button>
         <Button
           size="sm"
           onClick={handleSave}
           disabled={!hasChanges || updateMutation.isPending}
         >
-          Save Changes
+          {t("common.saveChanges")}
         </Button>
       </div>
 
       <div className="overflow-x-auto rounded-lg border">
-        <table className="w-full text-sm">
+        <table className="w-full min-w-[400px] text-sm">
           <thead>
             <tr className="border-b bg-muted/50">
-              <th className="px-4 py-2 text-left font-medium">Key</th>
-              <th className="px-4 py-2 text-left font-medium">Translation</th>
+              <th className="px-4 py-2 text-left font-medium">{t("common.key")}</th>
+              <th className="px-4 py-2 text-left font-medium">{t("common.translation")}</th>
             </tr>
           </thead>
           <tbody>
@@ -141,7 +141,7 @@ export function I18nAdminPage() {
 
       {filteredKeys.length === 0 && (
         <p className="text-center text-muted-foreground">
-          {search ? "No keys match the filter" : "No translation keys"}
+          {search ? t("common.noKeysMatch") : t("common.noTranslationKeys")}
         </p>
       )}
 
@@ -152,7 +152,7 @@ export function I18nAdminPage() {
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label>Key</Label>
+              <Label>{t("common.key")}</Label>
               <Input
                 value={newKey}
                 onChange={(e) => setNewKey(e.target.value)}
@@ -161,7 +161,7 @@ export function I18nAdminPage() {
               />
             </div>
             <div>
-              <Label>Value</Label>
+              <Label>{t("common.translation")}</Label>
               <Input
                 value={newValue}
                 onChange={(e) => setNewValue(e.target.value)}
@@ -174,7 +174,7 @@ export function I18nAdminPage() {
             <Button variant="outline" onClick={() => setAddKeyOpen(false)}>
               {t("common.cancel")}
             </Button>
-            <Button onClick={handleAddKey}>Add</Button>
+            <Button onClick={handleAddKey}>{t("common.add")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

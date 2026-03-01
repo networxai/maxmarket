@@ -15,6 +15,7 @@ import {
 import { ApiError } from "@/api/client";
 import { formatDateTime } from "@/lib/format-date";
 import { displayName } from "@/lib/display-name";
+import { useTranslation } from "@/i18n/useTranslation";
 
 const EVENT_TYPES = [
   "order.created",
@@ -40,7 +41,7 @@ const TARGET_TYPES = [
   "stock",
 ];
 
-function CopyButton({ text }: { text: string }) {
+function CopyButton({ text, t }: { text: string; t: (k: string) => string }) {
   const [copied, setCopied] = useState(false);
   const handleCopy = () => {
     void navigator.clipboard.writeText(text).then(() => {
@@ -55,12 +56,13 @@ function CopyButton({ text }: { text: string }) {
       className="h-6 px-1 text-xs"
       onClick={handleCopy}
     >
-      {copied ? "Copied" : "Copy"}
+      {copied ? t("common.copied") : t("common.copy")}
     </Button>
   );
 }
 
 export function AuditLogsPage() {
+  const { t } = useTranslation();
   const { role } = useAuth();
   const [eventType, setEventType] = useState("");
   const [actorId, setActorId] = useState("");
@@ -92,7 +94,7 @@ export function AuditLogsPage() {
 
   const handleClear = async () => {
     if (!clearBeforeDate) {
-      toast.error("Select a date");
+      toast.error(t("audit.selectDate"));
       return;
     }
     const beforeDate = new Date(clearBeforeDate).toISOString();
@@ -102,14 +104,14 @@ export function AuditLogsPage() {
         beforeDate,
       });
       setClearOpen(false);
-      toast.success(`Cleared ${result.clearedCount} log entries`);
+      toast.success(t("audit.clearedCount", { count: String(result.clearedCount) }));
       void refetch();
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.status === 422) toast.error(err.message);
         else toast.error(err.message);
       } else {
-        toast.error("Failed to clear logs");
+        toast.error(t("errors.failedToClearLogs"));
       }
     }
   };
@@ -120,7 +122,7 @@ export function AuditLogsPage() {
   if (isError) {
     return (
       <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-destructive">
-        {error instanceof Error ? error.message : "Failed to load audit logs."}
+        {error instanceof Error ? error.message : t("errors.failedToLoadAuditLogs")}
       </div>
     );
   }
@@ -128,19 +130,19 @@ export function AuditLogsPage() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Audit Logs</h1>
+        <h1 className="text-2xl font-semibold">{t("audit.title")}</h1>
         {isSuperAdmin && (
           <Button variant="outline" size="sm" onClick={() => setClearOpen(true)}>
-            Clear Logs
+            {t("audit.clearLogsTitle")}
           </Button>
         )}
       </div>
 
       <div className="flex flex-wrap items-end gap-4 rounded border p-4">
         <div>
-          <Label>Event type</Label>
+          <Label>{t("audit.event")}</Label>
           <Input
-            placeholder="e.g. order.created"
+            placeholder={t("audit.eventTypePlaceholder")}
             value={eventType}
             onChange={(e) => {
               setEventType(e.target.value);
@@ -156,9 +158,9 @@ export function AuditLogsPage() {
           </datalist>
         </div>
         <div>
-          <Label>Actor ID</Label>
+          <Label>{t("audit.actorId")}</Label>
           <Input
-            placeholder="UUID"
+            placeholder={t("filters.uuidPlaceholder")}
             value={actorId}
             onChange={(e) => {
               setActorId(e.target.value);
@@ -168,7 +170,7 @@ export function AuditLogsPage() {
           />
         </div>
         <div>
-          <Label>Target type</Label>
+          <Label>{t("audit.targetType")}</Label>
           <select
             value={targetType}
             onChange={(e) => {
@@ -177,7 +179,7 @@ export function AuditLogsPage() {
             }}
             className="mt-1 h-9 w-32 rounded-md border border-input bg-background px-3 py-1"
           >
-            <option value="">—</option>
+            <option value="">{t("common.dash")}</option>
             {TARGET_TYPES.map((tt) => (
               <option key={tt} value={tt}>
                 {tt}
@@ -186,9 +188,9 @@ export function AuditLogsPage() {
           </select>
         </div>
         <div>
-          <Label>Target ID</Label>
+          <Label>{t("audit.targetId")}</Label>
           <Input
-            placeholder="UUID"
+            placeholder={t("filters.uuidPlaceholder")}
             value={targetId}
             onChange={(e) => {
               setTargetId(e.target.value);
@@ -198,7 +200,7 @@ export function AuditLogsPage() {
           />
         </div>
         <div>
-          <Label>From</Label>
+          <Label>{t("filters.from")}</Label>
           <Input
             type="date"
             value={dateFrom}
@@ -210,7 +212,7 @@ export function AuditLogsPage() {
           />
         </div>
         <div>
-          <Label>To</Label>
+          <Label>{t("filters.to")}</Label>
           <Input
             type="date"
             value={dateTo}
@@ -230,28 +232,28 @@ export function AuditLogsPage() {
               setPage(1);
             }}
           />
-          <span className="text-sm">Include cleared</span>
+          <span className="text-sm">{t("audit.includeCleared")}</span>
         </label>
       </div>
 
       {isLoading ? (
-        <div className="rounded-lg border p-4 text-muted-foreground">Loading…</div>
+        <div className="rounded-lg border p-4 text-muted-foreground">{t("audit.loading")}</div>
       ) : entries.length === 0 ? (
         <div className="rounded-lg border bg-muted/50 p-8 text-center text-muted-foreground">
-          No audit log entries
+          {t("audit.noEntries")}
         </div>
       ) : (
         <>
           <div className="overflow-x-auto rounded-lg border">
-            <table className="w-full text-sm">
+            <table className="w-full min-w-[600px] text-sm">
               <thead>
                 <tr className="border-b bg-muted/50">
-                  <th className="px-4 py-2 text-left font-medium">Timestamp</th>
-                  <th className="px-4 py-2 text-left font-medium">Event</th>
-                  <th className="px-4 py-2 text-left font-medium">Actor</th>
-                  <th className="px-4 py-2 text-left font-medium">Target</th>
-                  <th className="px-4 py-2 text-left font-medium">Correlation ID</th>
-                  <th className="px-4 py-2 text-left font-medium">Cleared</th>
+                  <th className="px-4 py-2 text-left font-medium">{t("audit.timestamp")}</th>
+                  <th className="px-4 py-2 text-left font-medium">{t("audit.event")}</th>
+                  <th className="px-4 py-2 text-left font-medium">{t("audit.actor")}</th>
+                  <th className="hidden px-4 py-2 text-left font-medium md:table-cell">{t("audit.target")}</th>
+                  <th className="hidden px-4 py-2 text-left font-medium md:table-cell">{t("audit.correlationId")}</th>
+                  <th className="hidden px-4 py-2 text-left font-medium sm:table-cell">{t("audit.cleared")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -282,25 +284,25 @@ export function AuditLogsPage() {
                           {displayName(entry.actorName, entry.actorId)}
                         </span>
                       </td>
-                      <td className="px-4 py-2">
+                      <td className="hidden px-4 py-2 md:table-cell">
                         {entry.targetType && entry.targetId
                           ? `${entry.targetType} ${entry.targetId.slice(0, 8)}…`
                           : "—"}
                       </td>
-                      <td className="px-4 py-2">
+                      <td className="hidden px-4 py-2 md:table-cell">
                         <div className="flex items-center gap-1">
                           <span className="font-mono text-xs truncate max-w-[120px]">
                             {entry.correlationId ?? "—"}
                           </span>
                           {entry.correlationId && (
-                            <CopyButton text={entry.correlationId} />
+                            <CopyButton text={entry.correlationId} t={t} />
                           )}
                         </div>
                       </td>
-                      <td className="px-4 py-2">
+                      <td className="hidden px-4 py-2 sm:table-cell">
                         {entry.clearedAt ? (
                           <span className="rounded bg-amber-500/20 px-2 py-0.5 text-xs text-amber-700 dark:text-amber-300">
-                            Cleared
+                            {t("audit.cleared")}
                           </span>
                         ) : (
                           "—"
@@ -337,10 +339,10 @@ export function AuditLogsPage() {
                 disabled={page <= 1}
                 onClick={() => setPage((p) => p - 1)}
               >
-                Previous
+                {t("common.previous")}
               </Button>
               <span className="text-sm text-muted-foreground">
-                Page {pagination.page} of {pagination.totalPages}
+                {t("common.pageOf", { page: pagination.page, total: pagination.totalPages })}
               </span>
               <Button
                 variant="outline"
@@ -348,7 +350,7 @@ export function AuditLogsPage() {
                 disabled={page >= pagination.totalPages}
                 onClick={() => setPage((p) => p + 1)}
               >
-                Next
+                {t("common.next")}
               </Button>
             </div>
           )}
@@ -358,15 +360,14 @@ export function AuditLogsPage() {
       <Dialog open={clearOpen} onOpenChange={setClearOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Clear Audit Logs</DialogTitle>
+            <DialogTitle>{t("audit.clearLogsTitle")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <p className="text-muted-foreground text-sm">
-              This will soft-delete all log entries before the selected date. The
-              clearing action itself is always preserved and cannot be cleared.
+              {t("audit.clearLogsDesc")}
             </p>
             <div>
-              <Label>Clear audit logs created before:</Label>
+              <Label>{t("audit.clearBeforeLabel")}</Label>
               <Input
                 type="datetime-local"
                 value={clearBeforeDate}
@@ -377,14 +378,14 @@ export function AuditLogsPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setClearOpen(false)}>
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button
               onClick={handleClear}
               disabled={!clearBeforeDate || clearMutation.isPending}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              Clear Logs
+              {t("actions.clearLogs")}
             </Button>
           </DialogFooter>
         </DialogContent>

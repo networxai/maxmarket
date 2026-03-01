@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "@/i18n/useTranslation";
 
 export interface PickedVariant {
   variantId: string;
@@ -37,9 +38,9 @@ interface VariantPickerProps {
   stockLoading?: boolean;
 }
 
-function StockBadge({ available, reserved }: { available: number; reserved: number }) {
+function StockBadge({ available, reserved, t }: { available: number; reserved: number; t: (k: string, p?: Record<string, number>) => string }) {
   const free = available - reserved;
-  const label = free <= 0 ? "Out of stock" : free < 10 ? `Low stock: ${free}` : `In stock: ${free}`;
+  const label = free <= 0 ? t("stock.outOfStock") : free < 10 ? t("stock.lowStockWithQty", { qty: free }) : t("stock.inStockWithQty", { qty: free });
   const className = cn(
     "text-sm",
     free <= 0 && "text-red-500",
@@ -50,6 +51,7 @@ function StockBadge({ available, reserved }: { available: number; reserved: numb
 }
 
 export function VariantPicker({ open, onOpenChange, onPick, stockByVariantId, stockLoading }: VariantPickerProps) {
+  const { t } = useTranslation();
   const [search, setSearch] = useState("");
   const { data, isLoading } = useProducts({ page: 1, pageSize: 50, search: search || undefined });
 
@@ -70,10 +72,10 @@ export function VariantPicker({ open, onOpenChange, onPick, stockByVariantId, st
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[80vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Add item</DialogTitle>
+          <DialogTitle>{t("variantPicker.addItem")}</DialogTitle>
         </DialogHeader>
         <Input
-          placeholder="Search products or SKU…"
+          placeholder={t("catalog.searchProductsOrSku")}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
@@ -102,16 +104,16 @@ export function VariantPicker({ open, onOpenChange, onPick, stockByVariantId, st
                     <div className="min-w-0 flex-1">
                       <p className="font-medium">{product.name}</p>
                       <p className="text-muted-foreground text-sm font-mono">
-                        {variant.sku} · {variant.unitType} · min {variant.minOrderQty} · {formatPrice(price)}/unit
+                        {variant.sku} · {variant.unitType} · {t("catalog.minQtyFormat", { qty: variant.minOrderQty })} · {formatPrice(price)}/unit
                       </p>
                       {showStock && (
                         <p className="mt-1">
                           {stock != null ? (
-                            <StockBadge available={stock.available} reserved={stock.reserved} />
+                            <StockBadge available={stock.available} reserved={stock.reserved} t={t} />
                           ) : stockLoading ? (
-                            <span className="text-muted-foreground text-sm">Stock: Loading…</span>
+                            <span className="text-muted-foreground text-sm">{t("stock.loading")}</span>
                           ) : (
-                            <span className="text-muted-foreground text-sm">Stock: —</span>
+                            <span className="text-muted-foreground text-sm">{t("stock.na")}</span>
                           )}
                         </p>
                       )}
@@ -122,14 +124,14 @@ export function VariantPicker({ open, onOpenChange, onPick, stockByVariantId, st
                       onClick={() => handleSelect(product, v)}
                       disabled={stock != null && stock.available - stock.reserved <= 0}
                     >
-                      Add
+                      {t("stock.add")}
                     </Button>
                   </div>
                 );
               })
             )}
             {data?.data.length === 0 && (
-              <p className="text-muted-foreground text-sm">No products found.</p>
+              <p className="text-muted-foreground text-sm">{t("catalog.noProducts")}</p>
             )}
           </div>
         )}

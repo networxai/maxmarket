@@ -44,7 +44,7 @@ export function SettingsPage() {
       }
       toast.success(t("settings.profileUpdated"));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to update");
+      toast.error(err instanceof Error ? err.message : t("errors.failedToUpdate"));
     }
   };
 
@@ -123,7 +123,7 @@ export function SettingsPage() {
 
       <Card>
         <CardHeader>
-          <h2 className="text-lg font-medium">Password</h2>
+          <h2 className="text-lg font-medium">{t("settings.password")}</h2>
         </CardHeader>
         <CardContent>
           <p className="text-muted-foreground text-sm">

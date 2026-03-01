@@ -18,10 +18,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatPrice, getRevenue } from "@/lib/format-currency";
+import { useTranslation } from "@/i18n/useTranslation";
 
 const CHART_COLORS = ["#2563eb", "#3b82f6", "#60a5fa", "#93c5fd", "#bfdbfe"];
 
 export function SalesByManagerPage() {
+  const { t } = useTranslation();
   const { accessToken } = useAuth();
   const today = new Date().toISOString().slice(0, 10);
   const monthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
@@ -55,9 +57,9 @@ export function SalesByManagerPage() {
         { format: "csv", dateFrom, dateTo, managerId: managerId || undefined },
         accessToken
       );
-      toast.success("CSV downloaded");
+      toast.success(t("actions.csvDownloaded"));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Export failed");
+      toast.error(err instanceof Error ? err.message : t("actions.exportFailed"));
     }
   };
 
@@ -72,32 +74,35 @@ export function SalesByManagerPage() {
   if (isError) {
     return (
       <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-destructive">
-        {error instanceof Error ? error.message : "Failed to load report."}
+        {error instanceof Error ? error.message : t("errors.failedToLoad")}
       </div>
     );
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-2">
+    <div className="flex flex-col gap-4 md:gap-6">
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-2xl font-bold tracking-tight">{t("pages.reports.salesByManager")}</h2>
+          <p className="text-muted-foreground text-sm">{t("pages.reports.salesByManagerDesc")}</p>
+        </div>
         <Button variant="ghost" size="sm" asChild>
-          <Link to="/reports">← Reports</Link>
+          <Link to="/reports">{t("pages.reports.backToReports")}</Link>
         </Button>
       </div>
-      <h1 className="text-2xl font-semibold">Sales by Manager</h1>
 
-      <div className="flex flex-wrap items-end gap-4">
+      <div className="flex flex-col flex-wrap gap-2 sm:flex-row sm:items-end">
         <div>
-          <Label>Manager</Label>
+          <Label>{t("filters.manager")}</Label>
           <select
             value={managerId}
             onChange={(e) => {
               setManagerId(e.target.value);
               setPage(1);
             }}
-            className="mt-1 h-9 w-64 rounded-md border border-input bg-background px-3 py-1"
+            className="mt-1 h-9 w-full rounded-md border border-input bg-background px-3 py-1 sm:w-64"
           >
-            <option value="">All managers</option>
+            <option value="">{t("filters.allManagers")}</option>
             {managers.map((m) => (
               <option key={m.id} value={m.id}>
                 {m.fullName}
@@ -106,7 +111,7 @@ export function SalesByManagerPage() {
           </select>
         </div>
         <div>
-          <Label>From</Label>
+          <Label>{t("filters.from")}</Label>
           <Input
             type="date"
             value={dateFrom}
@@ -114,11 +119,11 @@ export function SalesByManagerPage() {
               setDateFrom(e.target.value);
               setPage(1);
             }}
-            className="mt-1 w-40"
+            className="mt-1 w-full sm:w-40"
           />
         </div>
         <div>
-          <Label>To</Label>
+          <Label>{t("filters.to")}</Label>
           <Input
             type="date"
             value={dateTo}
@@ -126,14 +131,19 @@ export function SalesByManagerPage() {
               setDateTo(e.target.value);
               setPage(1);
             }}
-            className="mt-1 w-40"
+            className="mt-1 w-full sm:w-40"
           />
         </div>
         <Button variant="outline" size="sm" onClick={handleExportCSV}>
-          Export CSV
+          {t("actions.exportCsv")}
         </Button>
-        <Button variant="outline" size="sm" disabled title="PDF export coming soon">
-          Export PDF
+        <Button
+          variant="outline"
+          size="sm"
+          disabled
+          title={t("actions.pdfExportComingSoon")}
+        >
+          {t("actions.exportPdf")}
         </Button>
       </div>
 
@@ -141,7 +151,7 @@ export function SalesByManagerPage() {
         <Skeleton className="h-[300px] w-full" />
       ) : rows.length === 0 ? (
         <div className="rounded-lg border bg-muted/50 p-8 text-center text-muted-foreground">
-          No data for the selected period
+          {t("reports.noData")}
         </div>
       ) : (
         <>
@@ -156,7 +166,7 @@ export function SalesByManagerPage() {
                 <YAxis type="category" dataKey="managerName" width={80} />
                 <Tooltip
                   formatter={(v: number | undefined) =>
-                    v != null ? [formatPrice(v), "Revenue"] : []
+                    v != null ? [formatPrice(v), t("table.revenue")] : []
                   }
                 />
                 <Bar dataKey="chartRevenue">
@@ -169,12 +179,12 @@ export function SalesByManagerPage() {
           </div>
 
           <div className="overflow-x-auto rounded-lg border">
-            <table className="w-full text-sm">
+            <table className="w-full min-w-[500px] text-sm">
               <thead>
                 <tr className="border-b bg-muted/50">
-                  <th className="px-4 py-2 text-left font-medium">Manager Name</th>
-                  <th className="px-4 py-2 text-right font-medium">Orders Approved</th>
-                  <th className="px-4 py-2 text-right font-medium">Revenue</th>
+                  <th className="px-4 py-2 text-left font-medium">{t("table.managerName")}</th>
+                  <th className="px-4 py-2 text-right font-medium">{t("table.ordersApproved")}</th>
+                  <th className="px-4 py-2 text-right font-medium">{t("table.revenue")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -190,7 +200,7 @@ export function SalesByManagerPage() {
               </tbody>
               <tfoot>
                 <tr className="border-t bg-muted/30 font-medium">
-                  <td className="px-4 py-2">Total</td>
+                  <td className="px-4 py-2">{t("common.total")}</td>
                   <td className="px-4 py-2 text-right">{totalOrders}</td>
                   <td className="px-4 py-2 text-right">
                     {formatPrice(totalRevenue)}
@@ -208,10 +218,13 @@ export function SalesByManagerPage() {
                 disabled={page <= 1}
                 onClick={() => setPage((p) => p - 1)}
               >
-                Previous
+                {t("common.previous")}
               </Button>
               <span className="text-sm text-muted-foreground">
-                Page {pagination.page} of {pagination.totalPages}
+                {t("common.pageOf", {
+                  page: pagination.page,
+                  total: pagination.totalPages,
+                })}
               </span>
               <Button
                 variant="outline"
@@ -219,7 +232,7 @@ export function SalesByManagerPage() {
                 disabled={page >= pagination.totalPages}
                 onClick={() => setPage((p) => p + 1)}
               >
-                Next
+                {t("common.next")}
               </Button>
             </div>
           )}

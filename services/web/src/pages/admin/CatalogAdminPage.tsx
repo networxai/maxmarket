@@ -43,28 +43,30 @@ import { ApiError } from "@/api/client";
 import { formatPrice } from "@/lib/format-currency";
 import type { Product, ProductVariant, Category } from "@/types/api";
 import type { MultilingualString } from "@/types/api";
+import { useTranslation } from "@/i18n/useTranslation";
 
 const UNIT_TYPES = ["piece", "box", "kg"] as const;
 
 export function CatalogAdminPage() {
+  const { t } = useTranslation();
   const [tab, setTab] = useState<"products" | "categories">("products");
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-semibold">Catalog Admin</h1>
+      <h1 className="text-2xl font-semibold">{t("catalogAdmin.title")}</h1>
       <div className="flex gap-2 border-b">
         <button
           type="button"
           onClick={() => setTab("products")}
           className={`border-b-2 px-4 py-2 text-sm font-medium ${tab === "products" ? "border-primary" : "border-transparent"}`}
         >
-          Products
+          {t("catalogAdmin.products")}
         </button>
         <button
           type="button"
           onClick={() => setTab("categories")}
           className={`border-b-2 px-4 py-2 text-sm font-medium ${tab === "categories" ? "border-primary" : "border-transparent"}`}
         >
-          Categories
+          {t("catalogAdmin.categories")}
         </button>
       </div>
       {tab === "products" && <ProductsTab />}
@@ -74,6 +76,7 @@ export function CatalogAdminPage() {
 }
 
 function ProductsTab() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
@@ -90,7 +93,7 @@ function ProductsTab() {
   if (isError) {
     return (
       <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-destructive">
-        {error instanceof Error ? error.message : "Failed to load products."}
+        {error instanceof Error ? error.message : t("errors.failedToLoadProducts")}
       </div>
     );
   }
@@ -100,7 +103,7 @@ function ProductsTab() {
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex flex-wrap items-center gap-4">
           <Input
-            placeholder="Search products…"
+            placeholder={t("catalogAdmin.searchProducts")}
             value={search}
             onChange={(e) => {
               setSearch(e.target.value);
@@ -116,7 +119,7 @@ function ProductsTab() {
             }}
             className="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm"
           >
-            <option value="">All categories</option>
+            <option value="">{t("filters.allCategories")}</option>
             {categories.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
@@ -125,39 +128,39 @@ function ProductsTab() {
           </select>
         </div>
         <Button onClick={() => navigate("/admin/catalog/products/new")}>
-          Create Product
+          {t("catalogAdmin.newProduct")}
         </Button>
       </div>
 
       {isLoading ? (
-        <div className="rounded-lg border p-4 text-muted-foreground">Loading…</div>
+        <div className="rounded-lg border p-4 text-muted-foreground">{t("common.loading")}</div>
       ) : !productsData?.data.length ? (
         <div className="rounded-lg border bg-muted/50 p-8 text-center text-muted-foreground">
-          No products found.
+          {t("catalogAdmin.noProducts")}
         </div>
       ) : (
         <>
           <div className="overflow-x-auto rounded-lg border">
-            <table className="w-full text-sm">
+            <table className="w-full min-w-[500px] text-sm">
               <thead>
                 <tr className="border-b bg-muted/50">
-                  <th className="px-4 py-2 text-left font-medium">Name</th>
-                  <th className="px-4 py-2 text-left font-medium">Category</th>
-                  <th className="px-4 py-2 text-left font-medium">Variants</th>
-                  <th className="px-4 py-2 text-left font-medium">Active</th>
-                  <th className="px-4 py-2 text-right font-medium">Actions</th>
+                  <th className="px-4 py-2 text-left font-medium">{t("table.name")}</th>
+                  <th className="hidden px-4 py-2 text-left font-medium md:table-cell">{t("table.category")}</th>
+                  <th className="px-4 py-2 text-left font-medium">{t("table.variants")}</th>
+                  <th className="px-4 py-2 text-left font-medium">{t("table.active")}</th>
+                  <th className="px-4 py-2 text-right font-medium">{t("table.actions")}</th>
                 </tr>
               </thead>
               <tbody>
                 {productsData.data.map((p: Product) => (
                   <tr key={p.id} className="border-b last:border-0">
                     <td className="px-4 py-2">{p.name}</td>
-                    <td className="px-4 py-2">{p.category?.name ?? "—"}</td>
+                    <td className="hidden px-4 py-2 md:table-cell">{p.category?.name ?? "—"}</td>
                     <td className="px-4 py-2">{p.variants.length}</td>
-                    <td className="px-4 py-2">{p.isActive ? "Yes" : "No"}</td>
+                    <td className="px-4 py-2">{p.isActive ? t("common.yes") : t("common.no")}</td>
                     <td className="px-4 py-2 text-right">
                       <Button variant="ghost" size="sm" asChild>
-                        <Link to={`/admin/catalog/products/${p.id}`}>Edit</Link>
+                        <Link to={`/admin/catalog/products/${p.id}`}>{t("common.edit")}</Link>
                       </Button>
                     </td>
                   </tr>
@@ -174,10 +177,10 @@ function ProductsTab() {
                 disabled={page <= 1}
                 onClick={() => setPage((p) => p - 1)}
               >
-                Previous
+                {t("common.previous")}
               </Button>
               <span className="text-sm text-muted-foreground">
-                Page {productsData.pagination.page} of {productsData.pagination.totalPages}
+                {t("common.pageOf", { page: productsData.pagination.page, total: productsData.pagination.totalPages })}
               </span>
               <Button
                 variant="outline"
@@ -185,7 +188,7 @@ function ProductsTab() {
                 disabled={page >= productsData.pagination.totalPages}
                 onClick={() => setPage((p) => p + 1)}
               >
-                Next
+                {t("common.next")}
               </Button>
             </div>
           )}
@@ -196,6 +199,7 @@ function ProductsTab() {
 }
 
 function CategoriesTab() {
+  const { t } = useTranslation();
   const [createOpen, setCreateOpen] = useState(false);
   const [editCat, setEditCat] = useState<Category | null>(null);
   const [deleteCat, setDeleteCat] = useState<Category | null>(null);
@@ -210,7 +214,7 @@ function CategoriesTab() {
   const handleCreateSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!createName.en.trim()) {
-      toast.error("English name is required");
+      toast.error(t("errors.englishNameRequired"));
       return;
     }
     try {
@@ -219,11 +223,11 @@ function CategoriesTab() {
       });
       setCreateOpen(false);
       setCreateName({ en: "", hy: null, ru: null });
-      toast.success("Category created");
+      toast.success(t("catalogAdmin.categoryCreated"));
       void refetch();
     } catch (err) {
       if (err instanceof ApiError) toast.error(err.message);
-      else toast.error("Failed to create");
+      else toast.error(t("errors.failedToCreate"));
     }
   };
 
@@ -231,7 +235,7 @@ function CategoriesTab() {
     if (!editCat) return;
     e.preventDefault();
     if (!editName.en.trim()) {
-      toast.error("English name is required");
+      toast.error(t("errors.englishNameRequired"));
       return;
     }
     try {
@@ -239,11 +243,11 @@ function CategoriesTab() {
         name: { en: editName.en.trim(), hy: editName.hy?.trim() || null, ru: editName.ru?.trim() || null },
       });
       setEditCat(null);
-      toast.success("Category updated");
+      toast.success(t("catalogAdmin.categoryUpdated"));
       void refetch();
     } catch (err) {
       if (err instanceof ApiError) toast.error(err.message);
-      else toast.error("Failed to update");
+      else toast.error(t("errors.failedToUpdate"));
     }
   };
 
@@ -257,19 +261,19 @@ function CategoriesTab() {
     try {
       await deleteMutation.mutateAsync(deleteCat.id);
       setDeleteCat(null);
-      toast.success("Category deleted");
+      toast.success(t("catalogAdmin.categoryDeleted"));
       void refetch();
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.status === 409) {
           toast.error(
-            "Cannot delete — products are assigned to this category. Reassign products first."
+            t("errors.cannotDeleteCategoryWithProducts")
           );
         } else {
           toast.error(err.message);
         }
       } else {
-        toast.error("Failed to delete");
+        toast.error(t("errors.failedToDelete"));
       }
     }
   };
@@ -277,22 +281,22 @@ function CategoriesTab() {
   return (
     <div className="space-y-4">
       <div className="flex justify-end">
-        <Button onClick={() => setCreateOpen(true)}>New Category</Button>
+        <Button onClick={() => setCreateOpen(true)}>{t("catalogAdmin.newCategory")}</Button>
       </div>
 
       {isLoading ? (
-        <div className="rounded-lg border p-4 text-muted-foreground">Loading…</div>
+        <div className="rounded-lg border p-4 text-muted-foreground">{t("common.loading")}</div>
       ) : !categories.length ? (
         <div className="rounded-lg border bg-muted/50 p-8 text-center text-muted-foreground">
-          No categories.
+          {t("catalogAdmin.noCategories")}
         </div>
       ) : (
         <div className="overflow-x-auto rounded-lg border">
-          <table className="w-full text-sm">
+          <table className="w-full min-w-[300px] text-sm">
             <thead>
-              <tr className="border-b bg-muted/50">
-                <th className="px-4 py-2 text-left font-medium">Name</th>
-                <th className="px-4 py-2 text-right font-medium">Actions</th>
+                <tr className="border-b bg-muted/50">
+                <th className="px-4 py-2 text-left font-medium">{t("table.name")}</th>
+                <th className="px-4 py-2 text-right font-medium">{t("table.actions")}</th>
               </tr>
             </thead>
             <tbody>
@@ -301,7 +305,7 @@ function CategoriesTab() {
                   <td className="px-4 py-2">{c.name}</td>
                   <td className="px-4 py-2 text-right">
                     <Button variant="ghost" size="sm" onClick={() => openEdit(c)}>
-                      Edit
+                      {t("common.edit")}
                     </Button>
                     <Button
                       variant="ghost"
@@ -309,7 +313,7 @@ function CategoriesTab() {
                       className="text-destructive hover:text-destructive"
                       onClick={() => setDeleteCat(c)}
                     >
-                      Delete
+                      {t("common.delete")}
                     </Button>
                   </td>
                 </tr>
@@ -322,16 +326,16 @@ function CategoriesTab() {
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>New Category</DialogTitle>
+            <DialogTitle>{t("catalogAdmin.newCategoryTitle")}</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleCreateSubmit} className="space-y-4">
-            <MultilingualInput label="Category Name" value={createName} onChange={setCreateName} required />
+            <MultilingualInput label={t("catalogAdmin.categoryName")} value={createName} onChange={setCreateName} required />
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>
-                Cancel
+                {t("common.cancel")}
               </Button>
               <Button type="submit" disabled={createMutation.isPending}>
-                Create
+                {t("common.create")}
               </Button>
             </DialogFooter>
           </form>
@@ -341,17 +345,17 @@ function CategoriesTab() {
       <Dialog open={!!editCat} onOpenChange={(o) => !o && setEditCat(null)}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Edit Category</DialogTitle>
+            <DialogTitle>{t("catalogAdmin.editCategoryTitle")}</DialogTitle>
           </DialogHeader>
           {editCat && (
             <form onSubmit={handleEditSubmit} className="space-y-4">
-              <MultilingualInput label="Category Name" value={editName} onChange={setEditName} required />
+              <MultilingualInput label={t("catalogAdmin.categoryName")} value={editName} onChange={setEditName} required />
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setEditCat(null)}>
-                  Cancel
+                  {t("common.cancel")}
                 </Button>
                 <Button type="submit" disabled={updateMutation.isPending}>
-                  Save
+                  {t("common.save")}
                 </Button>
               </DialogFooter>
             </form>
@@ -362,18 +366,18 @@ function CategoriesTab() {
       <AlertDialog open={!!deleteCat} onOpenChange={(o) => !o && setDeleteCat(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete category</AlertDialogTitle>
+            <AlertDialogTitle>{t("catalogAdmin.deleteCategoryTitle")}</AlertDialogTitle>
             <AlertDialogDescription>
-              Delete &quot;{deleteCat?.name}&quot;?
+              {t("clientGroups.deleteDesc", { name: deleteCat?.name ?? "" })}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDelete}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              Delete
+              {t("common.delete")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -383,6 +387,7 @@ function CategoriesTab() {
 }
 
 export function CreateProductPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { data: categories = [] } = useCategories();
   const createMutation = useCreateProduct();
@@ -400,26 +405,26 @@ export function CreateProductPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.en.trim()) {
-      toast.error("Product name (English) is required");
+      toast.error(t("catalogAdmin.productNameRequired"));
       return;
     }
     if (!description.en.trim()) {
-      toast.error("Product description (English) is required");
+      toast.error(t("catalogAdmin.productDescRequired"));
       return;
     }
     if (!sku.trim()) {
-      toast.error("Variant SKU is required");
+      toast.error(t("catalogAdmin.variantSkuRequired"));
       return;
     }
     const cp = Number(costPrice);
     const ppu = Number(pricePerUnit);
     const ppb = pricePerBox ? Number(pricePerBox) : undefined;
     if (cp < 0 || ppu < 0 || (ppb != null && ppb < 0)) {
-      toast.error("Prices must be >= 0");
+      toast.error(t("catalogAdmin.pricesMustBePositive"));
       return;
     }
     if (minOrderQty < 1) {
-      toast.error("Min order qty must be >= 1");
+      toast.error(t("catalogAdmin.minOrderQtyRequired"));
       return;
     }
     try {
@@ -438,14 +443,14 @@ export function CreateProductPage() {
           },
         ],
       });
-      toast.success("Product created");
+      toast.success(t("catalogAdmin.productCreated"));
       navigate(`/admin/catalog/products/${product.id}`);
     } catch (err) {
       if (err instanceof ApiError) {
-        if (err.status === 409) toast.error("SKU already exists");
+        if (err.status === 409) toast.error(t("errors.skuAlreadyExists"));
         else toast.error(err.message);
       } else {
-        toast.error("Failed to create product");
+        toast.error(t("errors.failedToCreateProduct"));
       }
     }
   };
@@ -453,25 +458,25 @@ export function CreateProductPage() {
   return (
     <div className="space-y-4">
       <Button variant="ghost" size="sm" onClick={() => navigate("/admin/catalog")}>
-        ← Catalog Admin
+        {t("catalogAdmin.backToCatalog")}
       </Button>
-      <h1 className="text-2xl font-semibold">Create Product</h1>
+      <h1 className="text-2xl font-semibold">{t("catalogAdmin.createProduct")}</h1>
       <form onSubmit={handleSubmit} className="max-w-2xl space-y-6">
-        <MultilingualInput label="Product Name" value={name} onChange={setName} required />
+        <MultilingualInput label={t("catalogAdmin.productName")} value={name} onChange={setName} required />
         <MultilingualInput
-          label="Product Description"
+          label={t("catalogAdmin.productDescription")}
           value={description}
           onChange={setDescription}
           required
         />
         <div>
-          <Label>Category</Label>
+          <Label>{t("table.category")}</Label>
           <select
             value={categoryId}
             onChange={(e) => setCategoryId(e.target.value)}
             className="mt-1 flex h-9 w-full rounded-md border border-input bg-background px-3 py-1"
           >
-            <option value="">—</option>
+            <option value="">{t("common.dash")}</option>
             {categories.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
@@ -480,14 +485,14 @@ export function CreateProductPage() {
           </select>
         </div>
         <div className="rounded border p-4">
-          <h2 className="mb-3 font-medium">Initial Variant</h2>
+          <h2 className="mb-3 font-medium">{t("catalogAdmin.initialVariant")}</h2>
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <Label>SKU (required)</Label>
+              <Label>{t("catalogAdmin.skuRequired")}</Label>
               <Input value={sku} onChange={(e) => setSku(e.target.value)} required className="mt-1" />
             </div>
             <div>
-              <Label>Unit type</Label>
+              <Label>{t("catalogAdmin.unitType")}</Label>
               <select
                 value={unitType}
                 onChange={(e) => setUnitType(e.target.value as "piece" | "box" | "kg")}
@@ -495,13 +500,13 @@ export function CreateProductPage() {
               >
                 {UNIT_TYPES.map((u) => (
                   <option key={u} value={u}>
-                    {u}
+                    {t(`unitTypes.${u}`)}
                   </option>
                 ))}
               </select>
             </div>
             <div>
-              <Label>Min order qty</Label>
+              <Label>{t("catalogAdmin.minOrderQty")}</Label>
               <Input
                 type="number"
                 min={1}
@@ -511,7 +516,7 @@ export function CreateProductPage() {
               />
             </div>
             <div>
-              <Label>Cost price</Label>
+              <Label>{t("catalogAdmin.costPrice")}</Label>
               <div className="flex items-center gap-2">
                 <Input
                   type="number"
@@ -525,7 +530,7 @@ export function CreateProductPage() {
               </div>
             </div>
             <div>
-              <Label>Price per unit</Label>
+              <Label>{t("catalogAdmin.pricePerUnit")}</Label>
               <div className="flex items-center gap-2">
                 <Input
                   type="number"
@@ -539,7 +544,7 @@ export function CreateProductPage() {
               </div>
             </div>
             <div>
-              <Label>Price per box (optional)</Label>
+              <Label>{t("catalogAdmin.pricePerBox")}</Label>
               <div className="flex items-center gap-2">
                 <Input
                   type="number"
@@ -556,10 +561,10 @@ export function CreateProductPage() {
         </div>
         <div className="flex gap-2">
           <Button type="submit" disabled={createMutation.isPending}>
-            Create Product
+            {t("catalogAdmin.createProduct")}
           </Button>
           <Button type="button" variant="outline" onClick={() => navigate("/admin/catalog")}>
-            Cancel
+            {t("common.cancel")}
           </Button>
         </div>
       </form>
@@ -568,6 +573,7 @@ export function CreateProductPage() {
 }
 
 export function ProductAdminDetailPage() {
+  const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { data: product, isLoading, isError, error, refetch } = useProduct(id ?? null);
@@ -595,13 +601,13 @@ export function ProductAdminDetailPage() {
   if (isError) {
     return (
       <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-destructive">
-        {error instanceof Error ? error.message : "Failed to load product."}
+        {error instanceof Error ? error.message : t("errors.failedToLoadProduct")}
       </div>
     );
   }
 
   if (isLoading || !product) {
-    return <div className="rounded-lg border p-4 text-muted-foreground">Loading…</div>;
+    return <div className="rounded-lg border p-4 text-muted-foreground">{t("common.loading")}</div>;
   }
 
   const handleEditProductSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -616,7 +622,7 @@ export function ProductAdminDetailPage() {
     const categoryId = fd.get("categoryId") as string;
     const isActive = fd.get("isActive") === "true";
     if (!nameEn?.trim()) {
-      toast.error("Name (English) is required");
+      toast.error(t("errors.englishNameRequired"));
       return;
     }
     try {
@@ -627,11 +633,11 @@ export function ProductAdminDetailPage() {
         isActive,
       });
       setEditProductOpen(false);
-      toast.success("Product updated");
+      toast.success(t("catalogAdmin.productUpdated"));
       void refetch();
     } catch (err) {
       if (err instanceof ApiError) toast.error(err.message);
-      else toast.error("Failed to update");
+      else toast.error(t("errors.failedToUpdate"));
     }
   };
 
@@ -639,14 +645,14 @@ export function ProductAdminDetailPage() {
     if (!id) return;
     try {
       await deleteMutation.mutateAsync(id);
-      toast.success("Product deleted");
+      toast.success(t("catalogAdmin.productDeleted"));
       navigate("/admin/catalog");
     } catch (err) {
       if (err instanceof ApiError) {
-        if (err.status === 409) toast.error("Cannot delete — product has active orders");
+        if (err.status === 409) toast.error(t("errors.cannotDeleteProductWithOrders"));
         else toast.error(err.message);
       } else {
-        toast.error("Failed to delete");
+        toast.error(t("errors.failedToDelete"));
       }
     }
   };
@@ -661,7 +667,7 @@ export function ProductAdminDetailPage() {
     const pricePerUnit = Number(fd.get("pricePerUnit")) || 0;
     const pricePerBox = (fd.get("pricePerBox") as string) ? Number(fd.get("pricePerBox")) : null;
     if (!sku?.trim()) {
-      toast.error("SKU is required");
+      toast.error(t("catalogAdmin.variantSkuRequired"));
       return;
     }
     try {
@@ -674,14 +680,14 @@ export function ProductAdminDetailPage() {
         pricePerBox,
       });
       setAddVariantOpen(false);
-      toast.success("Variant added");
+      toast.success(t("catalogAdmin.variantAdded"));
       void refetch();
     } catch (err) {
       if (err instanceof ApiError) {
-        if (err.status === 409) toast.error("SKU already exists");
+        if (err.status === 409) toast.error(t("errors.skuAlreadyExists"));
         else toast.error(err.message);
       } else {
-        toast.error("Failed to add variant");
+        toast.error(t("errors.failedToAddVariant"));
       }
     }
   };
@@ -698,7 +704,7 @@ export function ProductAdminDetailPage() {
     const pricePerBox = (fd.get("pricePerBox") as string) ? Number(fd.get("pricePerBox")) : null;
     const isActive = fd.get("isActive") === "true";
     if (!sku?.trim()) {
-      toast.error("SKU is required");
+      toast.error(t("catalogAdmin.variantSkuRequired"));
       return;
     }
     try {
@@ -712,14 +718,14 @@ export function ProductAdminDetailPage() {
         isActive,
       });
       setEditVariant(null);
-      toast.success("Variant updated");
+      toast.success(t("catalogAdmin.variantUpdated"));
       void refetch();
     } catch (err) {
       if (err instanceof ApiError) {
-        if (err.status === 409) toast.error("Cannot change SKU — variant is referenced by active orders");
+        if (err.status === 409) toast.error(t("errors.cannotChangeSkuWithOrders"));
         else toast.error(err.message);
       } else {
-        toast.error("Failed to update variant");
+        toast.error(t("errors.failedToUpdateVariant"));
       }
     }
   };
@@ -729,14 +735,14 @@ export function ProductAdminDetailPage() {
     try {
       await deleteVariantMutation.mutateAsync(deleteVariant.id);
       setDeleteVariant(null);
-      toast.success("Variant deleted");
+      toast.success(t("catalogAdmin.variantDeleted"));
       void refetch();
     } catch (err) {
       if (err instanceof ApiError) {
-        if (err.status === 409) toast.error("Cannot delete — variant has active orders");
+        if (err.status === 409) toast.error(t("errors.cannotDeleteVariantWithOrders"));
         else toast.error(err.message);
       } else {
-        toast.error("Failed to delete variant");
+        toast.error(t("errors.failedToDeleteVariant"));
       }
     }
   };
@@ -748,17 +754,17 @@ export function ProductAdminDetailPage() {
     const url = fd.get("imageUrl") as string;
     const sortOrder = Number(fd.get("sortOrder")) || 0;
     if (!url?.trim()) {
-      toast.error("URL is required");
+      toast.error(t("catalogAdmin.urlRequired"));
       return;
     }
     try {
       await addImageMutation.mutateAsync({ url: url.trim(), sortOrder });
       setAddImageVariant(null);
-      toast.success("Image added");
+      toast.success(t("catalogAdmin.imageAdded"));
       void refetch();
     } catch (err) {
       if (err instanceof ApiError) toast.error(err.message);
-      else toast.error("Failed to add image");
+      else toast.error(t("errors.failedToAddImage"));
     }
   };
 
@@ -767,11 +773,11 @@ export function ProductAdminDetailPage() {
     try {
       await deleteImageMutation.mutateAsync(deleteImageVariant.imageId);
       setDeleteImageVariant(null);
-      toast.success("Image removed");
+      toast.success(t("catalogAdmin.imageRemoved"));
       void refetch();
     } catch (err) {
       if (err instanceof ApiError) toast.error(err.message);
-      else toast.error("Failed to remove image");
+      else toast.error(t("errors.failedToRemoveImage"));
     }
   };
 
@@ -785,11 +791,11 @@ export function ProductAdminDetailPage() {
     try {
       await reorderImageMutation.mutateAsync({ imageIds: reorderImageIds });
       setReorderImageVariant(null);
-      toast.success("Images reordered");
+      toast.success(t("catalogAdmin.imagesReordered"));
       void refetch();
     } catch (err) {
       if (err instanceof ApiError) toast.error(err.message);
-      else toast.error("Failed to reorder images");
+      else toast.error(t("errors.failedToReorderImages"));
     }
   };
 
@@ -805,14 +811,14 @@ export function ProductAdminDetailPage() {
     <div className="space-y-6">
       <div className="flex items-center gap-2">
         <Button variant="ghost" size="sm" onClick={() => navigate("/admin/catalog")}>
-          ← Catalog Admin
+          {t("catalogAdmin.backToCatalog")}
         </Button>
       </div>
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">{product.name}</h1>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={() => setEditProductOpen(true)}>
-            Edit Product
+            {t("catalogAdmin.editProductTitle")}
           </Button>
           <Button
             variant="outline"
@@ -820,15 +826,15 @@ export function ProductAdminDetailPage() {
             className="text-destructive"
             onClick={() => setDeleteProductOpen(true)}
           >
-            Delete Product
+            {t("catalogAdmin.deleteProductTitle")}
           </Button>
         </div>
       </div>
 
       <div className="rounded border p-4">
-        <h2 className="mb-4 font-medium">Variants</h2>
+        <h2 className="mb-4 font-medium">{t("table.variants")}</h2>
         <Button size="sm" className="mb-4" onClick={() => setAddVariantOpen(true)}>
-          Add Variant
+          {t("catalogAdmin.addVariantTitle")}
         </Button>
         <div className="space-y-4">
           {product.variants.map((v) => {
@@ -840,17 +846,17 @@ export function ProductAdminDetailPage() {
                     <span className="font-mono font-medium">{v.sku}</span>
                     <span className="text-muted-foreground text-sm">{v.unitType}</span>
                     <span className="text-muted-foreground text-sm">
-                      Cost: {formatPrice((v as ProductVariant).costPrice ?? 0)} · Unit: {formatPrice((v as ProductVariant).pricePerUnit ?? 0)}
-                      {(v as ProductVariant).pricePerBox != null && ` · Box: ${formatPrice((v as ProductVariant).pricePerBox!)}`}
+                      {t("catalogAdmin.costLabel")}: {formatPrice((v as ProductVariant).costPrice ?? 0)} · {t("catalogAdmin.unitLabel")}: {formatPrice((v as ProductVariant).pricePerUnit ?? 0)}
+                      {(v as ProductVariant).pricePerBox != null && ` · ${t("catalogAdmin.boxLabel")}: ${formatPrice((v as ProductVariant).pricePerBox!)}`}
                     </span>
-                    <span className="text-muted-foreground text-sm">Min: {v.minOrderQty}</span>
+                    <span className="text-muted-foreground text-sm">{t("catalogAdmin.min")}: {v.minOrderQty}</span>
                     <span className={`rounded px-2 py-0.5 text-xs ${v.isActive ? "bg-green-500/20 text-green-700" : "bg-muted"}`}>
-                      {v.isActive ? "Active" : "Inactive"}
+                      {v.isActive ? t("table.active") : t("catalogAdmin.inactive")}
                     </span>
                   </div>
                   <div className="flex gap-1">
                     <Button variant="ghost" size="sm" onClick={() => setEditVariant(v)}>
-                      Edit
+                      {t("common.edit")}
                     </Button>
                     <Button
                       variant="ghost"
@@ -858,15 +864,15 @@ export function ProductAdminDetailPage() {
                       className="text-destructive"
                       onClick={() => setDeleteVariant(v)}
                     >
-                      Delete
+                      {t("common.delete")}
                     </Button>
                     <Button variant="ghost" size="sm" onClick={() => setAddImageVariant(v)}>
-                      Add Image
+                      {t("catalogAdmin.addImageTitle")}
                     </Button>
                   </div>
                 </div>
                 <div className="mt-3">
-                  <h3 className="text-sm font-medium">Images</h3>
+                  <h3 className="text-sm font-medium">{t("catalogAdmin.images")}</h3>
                   <div className="mt-1 flex flex-wrap gap-2">
                     {images.map((img) => (
                       <div key={img.id} className="relative">
@@ -886,8 +892,8 @@ export function ProductAdminDetailPage() {
                       </div>
                     ))}
                     {images.length >= 2 && (
-                      <Button variant="ghost" size="sm" onClick={() => openReorder(v)}>
-                        Reorder
+                        <Button variant="ghost" size="sm" onClick={() => openReorder(v)}>
+                        {t("catalogAdmin.reorder")}
                       </Button>
                     )}
                   </div>
@@ -902,41 +908,41 @@ export function ProductAdminDetailPage() {
       <Dialog open={editProductOpen} onOpenChange={setEditProductOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Edit Product</DialogTitle>
+            <DialogTitle>{t("catalogAdmin.editProductTitle")}</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleEditProductSubmit} className="space-y-4">
             <div>
-              <Label>Name (English, required)</Label>
+              <Label>{t("catalogAdmin.nameEn")}</Label>
               <Input name="nameEn" defaultValue={product.name} required className="mt-1" />
             </div>
             <div>
-              <Label>Name (Armenian)</Label>
+              <Label>{t("catalogAdmin.nameHy")}</Label>
               <Input name="nameHy" className="mt-1" />
             </div>
             <div>
-              <Label>Name (Russian)</Label>
+              <Label>{t("catalogAdmin.nameRu")}</Label>
               <Input name="nameRu" className="mt-1" />
             </div>
             <div>
-              <Label>Description (English)</Label>
+              <Label>{t("catalogAdmin.descEn")}</Label>
               <Input name="descEn" defaultValue={product.description ?? ""} className="mt-1" />
             </div>
             <div>
-              <Label>Description (Armenian)</Label>
+              <Label>{t("catalogAdmin.descHy")}</Label>
               <Input name="descHy" className="mt-1" />
             </div>
             <div>
-              <Label>Description (Russian)</Label>
+              <Label>{t("catalogAdmin.descRu")}</Label>
               <Input name="descRu" className="mt-1" />
             </div>
             <div>
-              <Label>Category</Label>
+              <Label>{t("table.category")}</Label>
               <select
                 name="categoryId"
                 defaultValue={product.category?.id ?? ""}
                 className="mt-1 flex h-9 w-full rounded-md border border-input bg-background px-3 py-1"
               >
-                <option value="">—</option>
+                <option value="">{t("common.dash")}</option>
                 {categories.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
@@ -945,22 +951,22 @@ export function ProductAdminDetailPage() {
               </select>
             </div>
             <div>
-              <Label>Active</Label>
+              <Label>{t("table.active")}</Label>
               <select
                 name="isActive"
                 defaultValue={String(product.isActive)}
                 className="mt-1 flex h-9 w-full rounded-md border border-input bg-background px-3 py-1"
               >
-                <option value="true">Yes</option>
-                <option value="false">No</option>
+                <option value="true">{t("common.yes")}</option>
+                <option value="false">{t("common.no")}</option>
               </select>
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setEditProductOpen(false)}>
-                Cancel
+                {t("common.cancel")}
               </Button>
               <Button type="submit" disabled={updateMutation.isPending}>
-                Save
+                {t("common.save")}
               </Button>
             </DialogFooter>
           </form>
@@ -971,18 +977,18 @@ export function ProductAdminDetailPage() {
       <AlertDialog open={deleteProductOpen} onOpenChange={setDeleteProductOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete product</AlertDialogTitle>
+            <AlertDialogTitle>{t("catalogAdmin.deleteProductTitle")}</AlertDialogTitle>
             <AlertDialogDescription>
-              Delete &quot;{product.name}&quot;? This cannot be undone.
+              {t("catalogAdmin.deleteProductDesc", { name: product.name })}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDeleteProduct}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              Delete
+              {t("common.delete")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -992,44 +998,44 @@ export function ProductAdminDetailPage() {
       <Dialog open={addVariantOpen} onOpenChange={setAddVariantOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Add Variant</DialogTitle>
+            <DialogTitle>{t("catalogAdmin.addVariantTitle")}</DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleAddVariantSubmit} className="space-y-4">
+            <form onSubmit={handleAddVariantSubmit} className="space-y-4">
             <div>
-              <Label>SKU</Label>
+              <Label>{t("table.sku")}</Label>
               <Input name="sku" required className="mt-1" />
             </div>
             <div>
-              <Label>Unit type</Label>
+              <Label>{t("catalogAdmin.unitType")}</Label>
               <select
                 name="unitType"
                 className="mt-1 flex h-9 w-full rounded-md border border-input bg-background px-3 py-1"
               >
                 {UNIT_TYPES.map((u) => (
-                  <option key={u} value={u}>{u}</option>
+                  <option key={u} value={u}>{t(`unitTypes.${u}`)}</option>
                 ))}
               </select>
             </div>
             <div>
-              <Label>Min order qty</Label>
+              <Label>{t("catalogAdmin.minOrderQty")}</Label>
               <Input name="minOrderQty" type="number" min={1} defaultValue={1} className="mt-1" />
             </div>
             <div>
-              <Label>Cost price</Label>
+              <Label>{t("catalogAdmin.costPrice")}</Label>
               <div className="flex items-center gap-2">
                 <Input name="costPrice" type="number" min={0} step={0.01} required className="mt-1" />
                 <span className="text-muted-foreground text-sm">֏</span>
               </div>
             </div>
             <div>
-              <Label>Price per unit</Label>
+              <Label>{t("catalogAdmin.pricePerUnit")}</Label>
               <div className="flex items-center gap-2">
                 <Input name="pricePerUnit" type="number" min={0} step={0.01} required className="mt-1" />
                 <span className="text-muted-foreground text-sm">֏</span>
               </div>
             </div>
             <div>
-              <Label>Price per box (optional)</Label>
+              <Label>{t("catalogAdmin.pricePerBox")}</Label>
               <div className="flex items-center gap-2">
                 <Input name="pricePerBox" type="number" min={0} step={0.01} className="mt-1" />
                 <span className="text-muted-foreground text-sm">֏</span>
@@ -1037,10 +1043,10 @@ export function ProductAdminDetailPage() {
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setAddVariantOpen(false)}>
-                Cancel
+                {t("common.cancel")}
               </Button>
               <Button type="submit" disabled={createVariantMutation.isPending}>
-                Add
+                {t("common.add")}
               </Button>
             </DialogFooter>
           </form>
@@ -1051,68 +1057,68 @@ export function ProductAdminDetailPage() {
       <Dialog open={!!editVariant} onOpenChange={(o) => !o && setEditVariant(null)}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Edit Variant</DialogTitle>
+            <DialogTitle>{t("catalogAdmin.editVariantTitle")}</DialogTitle>
           </DialogHeader>
           {editVariant && (
             <form onSubmit={handleEditVariantSubmit} className="space-y-4">
               <div>
-                <Label>SKU</Label>
+                <Label>{t("table.sku")}</Label>
                 <Input name="sku" defaultValue={editVariant.sku} required className="mt-1" />
               </div>
               <div>
-                <Label>Unit type</Label>
+                <Label>{t("catalogAdmin.unitType")}</Label>
                 <select
                   name="unitType"
                   defaultValue={editVariant.unitType}
                   className="mt-1 flex h-9 w-full rounded-md border border-input bg-background px-3 py-1"
                 >
                   {UNIT_TYPES.map((u) => (
-                    <option key={u} value={u}>{u}</option>
+                    <option key={u} value={u}>{t(`unitTypes.${u}`)}</option>
                   ))}
                 </select>
               </div>
               <div>
-                <Label>Min order qty</Label>
+                <Label>{t("catalogAdmin.minOrderQty")}</Label>
                 <Input name="minOrderQty" type="number" min={1} defaultValue={editVariant.minOrderQty} className="mt-1" />
               </div>
               <div>
-                <Label>Cost price</Label>
+                <Label>{t("catalogAdmin.costPrice")}</Label>
                 <div className="flex items-center gap-2">
                   <Input name="costPrice" type="number" min={0} step={0.01} defaultValue={(editVariant as ProductVariant).costPrice ?? 0} className="mt-1" />
                   <span className="text-muted-foreground text-sm">֏</span>
                 </div>
               </div>
               <div>
-                <Label>Price per unit</Label>
+                <Label>{t("catalogAdmin.pricePerUnit")}</Label>
                 <div className="flex items-center gap-2">
                   <Input name="pricePerUnit" type="number" min={0} step={0.01} defaultValue={(editVariant as ProductVariant).pricePerUnit ?? 0} className="mt-1" />
                   <span className="text-muted-foreground text-sm">֏</span>
                 </div>
               </div>
               <div>
-                <Label>Price per box (optional)</Label>
+                <Label>{t("catalogAdmin.pricePerBox")}</Label>
                 <div className="flex items-center gap-2">
                   <Input name="pricePerBox" type="number" min={0} step={0.01} defaultValue={(editVariant as ProductVariant).pricePerBox ?? ""} className="mt-1" />
                   <span className="text-muted-foreground text-sm">֏</span>
                 </div>
               </div>
               <div>
-                <Label>Active</Label>
+                <Label>{t("table.active")}</Label>
                 <select
                   name="isActive"
                   defaultValue={String(editVariant.isActive)}
                   className="mt-1 flex h-9 w-full rounded-md border border-input bg-background px-3 py-1"
                 >
-                  <option value="true">Yes</option>
-                  <option value="false">No</option>
+                  <option value="true">{t("common.yes")}</option>
+                  <option value="false">{t("common.no")}</option>
                 </select>
               </div>
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setEditVariant(null)}>
-                  Cancel
+                  {t("common.cancel")}
                 </Button>
                 <Button type="submit" disabled={updateVariantMutation.isPending}>
-                  Save
+                  {t("common.save")}
                 </Button>
               </DialogFooter>
             </form>
@@ -1124,18 +1130,18 @@ export function ProductAdminDetailPage() {
       <AlertDialog open={!!deleteVariant} onOpenChange={(o) => !o && setDeleteVariant(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete variant</AlertDialogTitle>
+            <AlertDialogTitle>{t("catalogAdmin.deleteVariantTitle")}</AlertDialogTitle>
             <AlertDialogDescription>
-              Delete variant {deleteVariant?.sku}?
+              {t("catalogAdmin.deleteVariantDesc", { sku: deleteVariant?.sku ?? "" })}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDeleteVariant}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              Delete
+              {t("common.delete")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -1145,24 +1151,24 @@ export function ProductAdminDetailPage() {
       <Dialog open={!!addImageVariant} onOpenChange={(o) => !o && setAddImageVariant(null)}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Add Image — {addImageVariant?.sku}</DialogTitle>
+            <DialogTitle>{t("catalogAdmin.addImageFor", { sku: addImageVariant?.sku ?? "" })}</DialogTitle>
           </DialogHeader>
           {addImageVariant && (
             <form onSubmit={handleAddImageSubmit} className="space-y-4">
               <div>
-                <Label>Image URL</Label>
-                <Input name="imageUrl" type="url" required placeholder="https://..." className="mt-1" />
+                <Label>{t("catalogAdmin.imageUrl")}</Label>
+                <Input name="imageUrl" type="url" required placeholder={t("catalogAdmin.imageUrlPlaceholder")} className="mt-1" />
               </div>
               <div>
-                <Label>Sort order (optional)</Label>
+                <Label>{t("catalogAdmin.sortOrder")}</Label>
                 <Input name="sortOrder" type="number" defaultValue={0} className="mt-1" />
               </div>
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setAddImageVariant(null)}>
-                  Cancel
+                  {t("common.cancel")}
                 </Button>
                 <Button type="submit" disabled={addImageMutation.isPending}>
-                  Add
+                  {t("common.add")}
                 </Button>
               </DialogFooter>
             </form>
@@ -1174,14 +1180,14 @@ export function ProductAdminDetailPage() {
       <AlertDialog open={!!deleteImageVariant} onOpenChange={(o) => !o && setDeleteImageVariant(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Remove image</AlertDialogTitle>
+            <AlertDialogTitle>{t("catalogAdmin.removeImageTitle")}</AlertDialogTitle>
             <AlertDialogDescription>
-              Remove this image from the variant?
+              {t("catalogAdmin.removeImageDesc")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDeleteImage}>Remove</AlertDialogAction>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteImage}>{t("common.remove")}</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -1190,12 +1196,12 @@ export function ProductAdminDetailPage() {
       <Dialog open={!!reorderImageVariant} onOpenChange={(o) => !o && setReorderImageVariant(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Reorder Images — {reorderImageVariant?.sku}</DialogTitle>
+            <DialogTitle>{t("catalogAdmin.reorderImagesFor", { sku: reorderImageVariant?.sku ?? "" })}</DialogTitle>
           </DialogHeader>
           {reorderImageVariant && (
             <div className="space-y-4">
               <p className="text-muted-foreground text-sm">
-                Use up/down to change the order. Index 0 is the primary image.
+                {t("catalogAdmin.reorderHint")}
               </p>
               <div className="space-y-2">
                 {reorderImageIds.map((imageId, idx) => {
@@ -1239,10 +1245,10 @@ export function ProductAdminDetailPage() {
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setReorderImageVariant(null)}>
-                  Cancel
+                  {t("common.cancel")}
                 </Button>
                 <Button onClick={handleReorderSubmit} disabled={reorderImageMutation.isPending}>
-                  Save order
+                  {t("catalogAdmin.saveOrder")}
                 </Button>
               </DialogFooter>
             </div>

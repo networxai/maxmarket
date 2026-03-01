@@ -17,8 +17,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatPrice, getRevenue } from "@/lib/format-currency";
+import { useTranslation } from "@/i18n/useTranslation";
 
 export function SalesByDatePage() {
+  const { t } = useTranslation();
   const { accessToken } = useAuth();
   const today = new Date().toISOString().slice(0, 10);
   const monthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
@@ -43,9 +45,9 @@ export function SalesByDatePage() {
         { format: "csv", dateFrom, dateTo },
         accessToken
       );
-      toast.success("CSV downloaded");
+      toast.success(t("actions.csvDownloaded"));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Export failed");
+      toast.error(err instanceof Error ? err.message : t("actions.exportFailed"));
     }
   };
 
@@ -57,12 +59,12 @@ export function SalesByDatePage() {
         { format: "pdf", dateFrom, dateTo },
         accessToken
       );
-      toast.success("PDF downloaded");
+      toast.success(t("actions.pdfDownloaded"));
     } catch (err) {
       if (err && typeof err === "object" && "status" in err && err.status === 501) {
-        toast.error("PDF export is not yet available. Use CSV instead.");
+        toast.error(t("actions.pdfNotAvailable"));
       } else {
-        toast.error(err instanceof Error ? err.message : "Export failed");
+        toast.error(err instanceof Error ? err.message : t("actions.exportFailed"));
       }
     }
   };
@@ -80,23 +82,26 @@ export function SalesByDatePage() {
   if (isError) {
     return (
       <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-destructive">
-        {error instanceof Error ? error.message : "Failed to load report."}
+        {error instanceof Error ? error.message : t("errors.failedToLoad")}
       </div>
     );
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-2">
+    <div className="flex flex-col gap-4 md:gap-6">
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-2xl font-bold tracking-tight">{t("pages.reports.salesByDate")}</h2>
+          <p className="text-muted-foreground text-sm">{t("pages.reports.salesByDateDesc")}</p>
+        </div>
         <Button variant="ghost" size="sm" asChild>
-          <Link to="/reports">← Reports</Link>
+          <Link to="/reports">{t("pages.reports.backToReports")}</Link>
         </Button>
       </div>
-      <h1 className="text-2xl font-semibold">Sales by Date</h1>
 
-      <div className="flex flex-wrap items-end gap-4">
+      <div className="flex flex-wrap items-end gap-2">
         <div>
-          <Label>From</Label>
+          <Label>{t("filters.from")}</Label>
           <Input
             type="date"
             value={dateFrom}
@@ -108,7 +113,7 @@ export function SalesByDatePage() {
           />
         </div>
         <div>
-          <Label>To</Label>
+          <Label>{t("filters.to")}</Label>
           <Input
             type="date"
             value={dateTo}
@@ -125,50 +130,73 @@ export function SalesByDatePage() {
           onClick={handleExportCSV}
           disabled={!dateFrom || !dateTo}
         >
-          Export CSV
+          {t("actions.exportCsv")}
         </Button>
         <Button
           variant="outline"
           size="sm"
           onClick={handleExportPDF}
           disabled
-          title="PDF export coming soon"
+          title={t("actions.pdfExportComingSoon")}
         >
-          Export PDF
+          {t("actions.exportPdf")}
         </Button>
       </div>
 
+      {!isLoading && rows.length > 0 && (
+        <div className="grid gap-4 sm:grid-cols-3">
+          <div className="rounded-lg border bg-card p-4">
+            <p className="text-muted-foreground text-sm">{t("pages.reports.totalRevenue")}</p>
+            <p className="text-2xl font-bold">{formatPrice(totalRevenue)}</p>
+          </div>
+          <div className="rounded-lg border bg-card p-4">
+            <p className="text-muted-foreground text-sm">{t("pages.reports.totalOrders")}</p>
+            <p className="text-2xl font-bold">{totalOrders}</p>
+          </div>
+          <div className="rounded-lg border bg-card p-4">
+            <p className="text-muted-foreground text-sm">{t("pages.reports.totalUnits")}</p>
+            <p className="text-2xl font-bold">{totalQty}</p>
+          </div>
+        </div>
+      )}
+
       {isLoading ? (
-        <Skeleton className="h-[300px] w-full" />
+        <div className="rounded-lg border bg-card p-6">
+          <Skeleton className="h-[300px] w-full" />
+        </div>
       ) : rows.length === 0 ? (
-        <div className="rounded-lg border bg-muted/50 p-8 text-center text-muted-foreground">
-          No data for the selected period
+        <div className="rounded-lg border bg-card py-12">
+          <div className="flex flex-col items-center justify-center text-center">
+            <p className="text-lg font-semibold">{t("pages.reports.noData")}</p>
+          </div>
         </div>
       ) : (
         <>
-          <div className="h-[300px] w-full">
+          <div className="rounded-lg border bg-card p-4">
+            <div className="h-[300px] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={chartData}>
                 <XAxis dataKey="dimensionLabel" />
                 <YAxis tickFormatter={(v) => `${Math.round(v)} ֏`} />
                 <Tooltip
                   formatter={(v: number | undefined) =>
-                    v != null ? [formatPrice(v), "Revenue"] : []
+                    v != null ? [formatPrice(v), t("table.revenue")] : []
                   }
                 />
                 <Bar dataKey="chartRevenue" fill="#2563eb" />
               </BarChart>
             </ResponsiveContainer>
+            </div>
           </div>
 
-          <div className="overflow-x-auto rounded-lg border">
-            <table className="w-full text-sm">
+          <div className="overflow-x-auto rounded-lg border bg-card">
+            <table className="w-full min-w-[500px] text-sm">
               <thead>
                 <tr className="border-b bg-muted/50">
-                  <th className="px-4 py-2 text-left font-medium">Date</th>
-                  <th className="px-4 py-2 text-right font-medium">Orders</th>
-                  <th className="px-4 py-2 text-right font-medium">Units Sold</th>
-                  <th className="px-4 py-2 text-right font-medium">Revenue</th>
+                  <th className="px-4 py-2 text-left font-medium">{t("table.date")}</th>
+                  <th className="px-4 py-2 text-right font-medium">{t("table.orders")}</th>
+                  <th className="px-4 py-2 text-right font-medium">{t("table.unitsSold")}</th>
+                  <th className="px-4 py-2 text-right font-medium">{t("table.revenue")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -185,7 +213,7 @@ export function SalesByDatePage() {
               </tbody>
               <tfoot>
                 <tr className="border-t bg-muted/30 font-medium">
-                  <td className="px-4 py-2">Total</td>
+                  <td className="px-4 py-2">{t("common.total")}</td>
                   <td className="px-4 py-2 text-right">{totalOrders}</td>
                   <td className="px-4 py-2 text-right">{totalQty}</td>
                   <td className="px-4 py-2 text-right">
@@ -204,7 +232,7 @@ export function SalesByDatePage() {
                 disabled={page <= 1}
                 onClick={() => setPage((p) => p - 1)}
               >
-                Previous
+                {t("common.previous")}
               </Button>
               <span className="text-sm text-muted-foreground">
                 Page {pagination.page} of {pagination.totalPages}
@@ -215,7 +243,7 @@ export function SalesByDatePage() {
                 disabled={page >= pagination.totalPages}
                 onClick={() => setPage((p) => p + 1)}
               >
-                Next
+                {t("common.next")}
               </Button>
             </div>
           )}

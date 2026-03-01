@@ -34,11 +34,12 @@ import {
 import { ApiError } from "@/api/client";
 import { formatDate } from "@/lib/format-date";
 import type { User as UserType, Role } from "@/types/api";
+import { useTranslation } from "@/i18n/useTranslation";
 
 const ROLES: Role[] = ["super_admin", "admin", "manager", "agent", "client"];
 const LANGUAGES = ["en", "hy", "ru"] as const;
 
-function RoleBadge({ role }: { role: Role }) {
+function RoleBadge({ role, t }: { role: Role; t: (k: string) => string }) {
   const colors: Record<Role, string> = {
     super_admin: "bg-purple-500/20 text-purple-700 dark:text-purple-300",
     admin: "bg-blue-500/20 text-blue-700 dark:text-blue-300",
@@ -50,12 +51,13 @@ function RoleBadge({ role }: { role: Role }) {
     <span
       className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${colors[role] ?? "bg-muted"}`}
     >
-      {role.replace("_", " ")}
+      {t(`roles.${role}`)}
     </span>
   );
 }
 
 export function UsersAdminPage() {
+  const { t } = useTranslation();
   const { user: currentUser, role } = useAuth();
   const [page, setPage] = useState(1);
   const [roleFilter, setRoleFilter] = useState<string>("");
@@ -103,7 +105,7 @@ export function UsersAdminPage() {
     const clientGroupId = fd.get("clientGroupId") as string | null;
     if (!email || !password || !fullName || !userRole) return;
     if (userRole === "client" && !clientGroupId) {
-      toast.error("Client group is required for client role");
+      toast.error(t("users.clientGroupRequired"));
       return;
     }
     try {
@@ -116,15 +118,15 @@ export function UsersAdminPage() {
         clientGroupId: userRole === "client" ? clientGroupId || undefined : undefined,
       });
       setCreateOpen(false);
-      toast.success("User created");
+      toast.success(t("users.created"));
       void refetch();
     } catch (err) {
       if (err instanceof ApiError) {
-        if (err.status === 409) toast.error("Email already in use");
+        if (err.status === 409) toast.error(t("errors.emailAlreadyInUse"));
         else if (err.status === 422) toast.error(err.message);
         else toast.error(err.message);
       } else {
-        toast.error("Failed to create user");
+        toast.error(t("errors.failedToCreateUser"));
       }
     }
   };
@@ -151,11 +153,11 @@ export function UsersAdminPage() {
     try {
       await updateMutation.mutateAsync(payload);
       setEditUser(null);
-      toast.success("User updated");
+      toast.success(t("users.updated"));
       void refetch();
     } catch (err) {
       if (err instanceof ApiError) toast.error(err.message);
-      else toast.error("Failed to update user");
+      else toast.error(t("errors.failedToUpdateUser"));
     }
   };
 
@@ -164,18 +166,18 @@ export function UsersAdminPage() {
     try {
       await deactivateMutation.mutateAsync(deactivateUser.id);
       setDeactivateUser(null);
-      toast.success("User deactivated");
+      toast.success(t("users.deactivated"));
       void refetch();
     } catch (err) {
       if (err instanceof ApiError) toast.error(err.message);
-      else toast.error("Failed to deactivate user");
+      else toast.error(t("errors.failedToDeactivateUser"));
     }
   };
 
   if (isError) {
     return (
       <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-destructive">
-        {error instanceof Error ? error.message : "Failed to load users."}
+        {error instanceof Error ? error.message : t("errors.failedToLoadUsers")}
       </div>
     );
   }
@@ -183,9 +185,9 @@ export function UsersAdminPage() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <h1 className="text-2xl font-semibold">Users</h1>
+        <h1 className="text-2xl font-semibold">{t("users.title")}</h1>
         {canCreateUser && (
-          <Button onClick={() => setCreateOpen(true)}>Create User</Button>
+          <Button onClick={() => setCreateOpen(true)}>{t("users.createUser")}</Button>
         )}
       </div>
 
@@ -198,10 +200,10 @@ export function UsersAdminPage() {
           }}
           className="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm"
         >
-          <option value="">All roles</option>
+          <option value="">{t("filters.allRoles")}</option>
           {ROLES.map((r) => (
             <option key={r} value={r}>
-              {r.replace("_", " ")}
+              {t(`roles.${r}`)}
             </option>
           ))}
         </select>
@@ -216,7 +218,7 @@ export function UsersAdminPage() {
               }}
               className={`rounded px-3 py-1 text-sm ${activeFilter === f ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
             >
-              {f === "all" ? "All" : f === "active" ? "Active" : "Inactive"}
+              {f === "all" ? t("common.all") : f === "active" ? t("common.active") : t("common.inactive")}
             </button>
           ))}
         </div>
@@ -224,25 +226,25 @@ export function UsersAdminPage() {
 
       {isLoading ? (
         <div className="rounded-lg border p-4 text-muted-foreground">
-          Loading users…
+          {t("users.loading")}
         </div>
       ) : !data?.data.length ? (
         <div className="rounded-lg border bg-muted/50 p-8 text-center text-muted-foreground">
-          No users found.
+          {t("users.noUsers")}
         </div>
       ) : (
         <>
           <div className="overflow-x-auto rounded-lg border">
-            <table className="w-full text-sm">
+            <table className="w-full min-w-[600px] text-sm">
               <thead>
                 <tr className="border-b bg-muted/50">
-                  <th className="px-4 py-2 text-left font-medium">Name</th>
-                  <th className="px-4 py-2 text-left font-medium">Email</th>
-                  <th className="px-4 py-2 text-left font-medium">Role</th>
-                  <th className="px-4 py-2 text-left font-medium">Client group</th>
-                  <th className="px-4 py-2 text-left font-medium">Status</th>
-                  <th className="px-4 py-2 text-left font-medium">Created</th>
-                  <th className="px-4 py-2 text-right font-medium">Actions</th>
+                  <th className="px-4 py-2 text-left font-medium">{t("table.name")}</th>
+                  <th className="px-4 py-2 text-left font-medium">{t("auth.email")}</th>
+                  <th className="px-4 py-2 text-left font-medium">{t("auth.role")}</th>
+                  <th className="hidden px-4 py-2 text-left font-medium md:table-cell">{t("auth.clientGroup")}</th>
+                  <th className="px-4 py-2 text-left font-medium">{t("table.status")}</th>
+                  <th className="hidden px-4 py-2 text-left font-medium md:table-cell">{t("table.created")}</th>
+                  <th className="px-4 py-2 text-right font-medium">{t("table.actions")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -256,18 +258,18 @@ export function UsersAdminPage() {
                       <td className="px-4 py-2">{u.fullName}</td>
                       <td className="px-4 py-2">{u.email}</td>
                       <td className="px-4 py-2">
-                        <RoleBadge role={u.role} />
+                        <RoleBadge role={u.role} t={t} />
                       </td>
-                      <td className="px-4 py-2">
+                      <td className="hidden px-4 py-2 md:table-cell">
                         {u.role === "client" ? group?.name ?? "—" : "—"}
                       </td>
                       <td className="px-4 py-2">
                         <span
                           className={`inline-block h-2 w-2 rounded-full ${u.isActive ? "bg-green-500" : "bg-red-500"}`}
-                          title={u.isActive ? "Active" : "Inactive"}
+                          title={u.isActive ? t("common.active") : t("common.inactive")}
                         />
                       </td>
-                      <td className="px-4 py-2 text-muted-foreground">
+                      <td className="hidden px-4 py-2 text-muted-foreground md:table-cell">
                         {formatDate(u.createdAt)}
                       </td>
                       <td className="px-4 py-2 text-right">
@@ -278,7 +280,7 @@ export function UsersAdminPage() {
                               size="sm"
                               onClick={() => setEditUser(u)}
                             >
-                              Edit
+                              {t("common.edit")}
                             </Button>
                           )}
                           {canDeactivate && u.isActive && (
@@ -288,7 +290,7 @@ export function UsersAdminPage() {
                               className="text-destructive hover:text-destructive"
                               onClick={() => setDeactivateUser(u)}
                             >
-                              Deactivate
+                              {t("users.deactivateUser")}
                             </Button>
                           )}
                           {canManageClients && u.role === "agent" && (
@@ -297,7 +299,7 @@ export function UsersAdminPage() {
                               size="sm"
                               onClick={() => setManageClientsAgent(u)}
                             >
-                              Manage Clients
+                              {t("users.manageClients")}
                             </Button>
                           )}
                         </div>
@@ -317,10 +319,10 @@ export function UsersAdminPage() {
                 disabled={page <= 1}
                 onClick={() => setPage((p) => p - 1)}
               >
-                Previous
+                {t("common.previous")}
               </Button>
               <span className="text-sm text-muted-foreground">
-                Page {data.pagination.page} of {data.pagination.totalPages}
+                {t("common.pageOf", { page: data.pagination.page, total: data.pagination.totalPages })}
               </span>
               <Button
                 variant="outline"
@@ -328,7 +330,7 @@ export function UsersAdminPage() {
                 disabled={page >= data.pagination.totalPages}
                 onClick={() => setPage((p) => p + 1)}
               >
-                Next
+                {t("common.next")}
               </Button>
             </div>
           )}
@@ -339,11 +341,11 @@ export function UsersAdminPage() {
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Create User</DialogTitle>
+            <DialogTitle>{t("users.createUser")}</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleCreateSubmit} className="space-y-4">
             <div>
-              <Label htmlFor="create-email">Email</Label>
+              <Label htmlFor="create-email">{t("auth.email")}</Label>
               <Input
                 id="create-email"
                 name="email"
@@ -353,7 +355,7 @@ export function UsersAdminPage() {
               />
             </div>
             <div>
-              <Label htmlFor="create-password">Password</Label>
+              <Label htmlFor="create-password">{t("auth.password")}</Label>
               <Input
                 id="create-password"
                 name="password"
@@ -364,7 +366,7 @@ export function UsersAdminPage() {
               />
             </div>
             <div>
-              <Label htmlFor="create-fullName">Full name</Label>
+              <Label htmlFor="create-fullName">{t("auth.fullName")}</Label>
               <Input
                 id="create-fullName"
                 name="fullName"
@@ -373,7 +375,7 @@ export function UsersAdminPage() {
               />
             </div>
             <div>
-              <Label htmlFor="create-role">Role</Label>
+              <Label htmlFor="create-role">{t("auth.role")}</Label>
               <select
                 id="create-role"
                 name="role"
@@ -384,13 +386,13 @@ export function UsersAdminPage() {
               >
                 {ROLES.map((r) => (
                   <option key={r} value={r}>
-                    {r.replace("_", " ")}
+                    {t(`roles.${r}`)}
                   </option>
                 ))}
               </select>
             </div>
             <div>
-              <Label htmlFor="create-lang">Preferred language</Label>
+              <Label htmlFor="create-lang">{t("auth.preferredLanguage")}</Label>
               <select
                 id="create-lang"
                 name="preferredLanguage"
@@ -405,14 +407,14 @@ export function UsersAdminPage() {
             </div>
             {createRole === "client" && (
               <div>
-                <Label htmlFor="create-clientGroup">Client group (required for client)</Label>
+                <Label htmlFor="create-clientGroup">{t("users.clientGroupLabel")}</Label>
                 <select
                   id="create-clientGroup"
                   name="clientGroupId"
                   required
                   className="mt-1 flex h-9 w-full rounded-md border border-input bg-background px-3 py-1"
                 >
-                  <option value="">Select group…</option>
+                  <option value="">{t("users.selectGroup")}</option>
                   {groups.map((g) => (
                     <option key={g.id} value={g.id}>
                       {g.name}
@@ -423,10 +425,10 @@ export function UsersAdminPage() {
             )}
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>
-                Cancel
+                {t("common.cancel")}
               </Button>
               <Button type="submit" disabled={createMutation.isPending}>
-                Create
+                {t("common.create")}
               </Button>
             </DialogFooter>
           </form>
@@ -437,12 +439,12 @@ export function UsersAdminPage() {
       <Dialog open={!!editUser} onOpenChange={(o) => !o && setEditUser(null)}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Edit User</DialogTitle>
+            <DialogTitle>{t("users.editUser")}</DialogTitle>
           </DialogHeader>
           {editUser && (
             <form onSubmit={handleEditSubmit} className="space-y-4">
               <div>
-                <Label htmlFor="edit-fullName">Full name</Label>
+                <Label htmlFor="edit-fullName">{t("auth.fullName")}</Label>
                 <Input
                   id="edit-fullName"
                   name="fullName"
@@ -452,7 +454,7 @@ export function UsersAdminPage() {
                 />
               </div>
               <div>
-                <Label htmlFor="edit-lang">Preferred language</Label>
+                <Label htmlFor="edit-lang">{t("auth.preferredLanguage")}</Label>
                 <select
                   id="edit-lang"
                   name="preferredLanguage"
@@ -469,7 +471,7 @@ export function UsersAdminPage() {
               {canEditAny && (
                 <>
                   <div>
-                    <Label htmlFor="edit-role">Role</Label>
+                    <Label htmlFor="edit-role">{t("auth.role")}</Label>
                     <select
                       id="edit-role"
                       name="role"
@@ -478,33 +480,33 @@ export function UsersAdminPage() {
                     >
                       {ROLES.map((r) => (
                         <option key={r} value={r}>
-                          {r.replace("_", " ")}
+                          {t(`roles.${r}`)}
                         </option>
                       ))}
                     </select>
                   </div>
                   <div>
-                    <Label htmlFor="edit-active">Active</Label>
+                    <Label htmlFor="edit-active">{t("table.active")}</Label>
                     <select
                       id="edit-active"
                       name="isActive"
                       defaultValue={String(editUser.isActive)}
                       className="mt-1 flex h-9 w-full rounded-md border border-input bg-background px-3 py-1"
                     >
-                      <option value="true">Yes</option>
-                      <option value="false">No</option>
+                      <option value="true">{t("common.yes")}</option>
+                      <option value="false">{t("common.no")}</option>
                     </select>
                   </div>
                   {editUser.role === "client" && (
                     <div>
-                      <Label htmlFor="edit-clientGroup">Client group</Label>
+                      <Label htmlFor="edit-clientGroup">{t("auth.clientGroup")}</Label>
                       <select
                         id="edit-clientGroup"
                         name="clientGroupId"
                         defaultValue={editUser.clientGroupId ?? ""}
                         className="mt-1 flex h-9 w-full rounded-md border border-input bg-background px-3 py-1"
                       >
-                        <option value="">—</option>
+                        <option value="">{t("common.dash")}</option>
                         {groups.map((g) => (
                           <option key={g.id} value={g.id}>
                             {g.name}
@@ -517,10 +519,10 @@ export function UsersAdminPage() {
               )}
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setEditUser(null)}>
-                  Cancel
+                  {t("common.cancel")}
                 </Button>
                 <Button type="submit" disabled={updateMutation.isPending}>
-                  Save
+                  {t("common.save")}
                 </Button>
               </DialogFooter>
             </form>
@@ -532,18 +534,18 @@ export function UsersAdminPage() {
       <AlertDialog open={!!deactivateUser} onOpenChange={(o) => !o && setDeactivateUser(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Deactivate user</AlertDialogTitle>
+            <AlertDialogTitle>{t("users.deactivateTitle")}</AlertDialogTitle>
             <AlertDialogDescription>
-              Deactivate {deactivateUser?.fullName}? They will no longer be able to log in.
+              {t("users.deactivateDesc", { name: deactivateUser?.fullName ?? "" })}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDeactivate}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              Deactivate
+              {t("users.deactivateUser")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -555,6 +557,7 @@ export function UsersAdminPage() {
         onClose={() => setManageClientsAgent(null)}
         assignMutation={assignMutation}
         removeMutation={removeMutation}
+        t={t}
       />
     </div>
   );
@@ -565,11 +568,13 @@ function ManageClientsDialog({
   onClose,
   assignMutation,
   removeMutation,
+  t,
 }: {
   agent: UserType | null;
   onClose: () => void;
   assignMutation: ReturnType<typeof useAssignClientToAgent>;
   removeMutation: ReturnType<typeof useRemoveClientFromAgent>;
+  t: (k: string, p?: Record<string, string>) => string;
 }) {
   const [assignClientId, setAssignClientId] = useState("");
   const [removeClient, setRemoveClient] = useState<UserType | null>(null);
@@ -586,14 +591,14 @@ function ManageClientsDialog({
     if (!assignClientId || !agent) return;
     try {
       await assignMutation.mutateAsync(assignClientId);
-      toast.success("Client assigned");
+      toast.success(t("users.clientAssigned"));
       setAssignClientId("");
     } catch (err) {
       if (err instanceof ApiError) {
-        if (err.status === 409) toast.error("Already assigned");
+        if (err.status === 409) toast.error(t("users.alreadyAssigned"));
         else toast.error(err.message);
       } else {
-        toast.error("Failed to assign");
+        toast.error(t("errors.failedToAssign"));
       }
     }
   };
@@ -602,11 +607,11 @@ function ManageClientsDialog({
     if (!removeClient || !agent) return;
     try {
       await removeMutation.mutateAsync(removeClient.id);
-      toast.success("Client removed");
+      toast.success(t("users.clientRemoved"));
       setRemoveClient(null);
     } catch (err) {
       if (err instanceof ApiError) toast.error(err.message);
-      else toast.error("Failed to remove");
+      else toast.error(t("errors.failedToRemove"));
     }
   };
 
@@ -614,14 +619,14 @@ function ManageClientsDialog({
     <Dialog open={!!agent} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Manage clients — {agent?.fullName}</DialogTitle>
+          <DialogTitle>{t("users.manageClientsTitle", { name: agent?.fullName ?? "" })}</DialogTitle>
         </DialogHeader>
         {agent && (
           <div className="space-y-4">
             <div>
-              <h4 className="text-sm font-medium">Assigned clients</h4>
+              <h4 className="text-sm font-medium">{t("users.assignedClients")}</h4>
               {assignedClients.length === 0 ? (
-                <p className="text-muted-foreground text-sm">None</p>
+                <p className="text-muted-foreground text-sm">{t("common.none")}</p>
               ) : (
                 <ul className="mt-1 space-y-1">
                   {assignedClients.map((c) => (
@@ -636,7 +641,7 @@ function ManageClientsDialog({
                         className="text-destructive"
                         onClick={() => setRemoveClient(c)}
                       >
-                        Remove
+                        {t("users.removeClient")}
                       </Button>
                     </li>
                   ))}
@@ -644,14 +649,14 @@ function ManageClientsDialog({
               )}
             </div>
             <div>
-              <h4 className="text-sm font-medium">Assign client</h4>
+              <h4 className="text-sm font-medium">{t("users.assignClient")}</h4>
               <div className="mt-1 flex gap-2">
                 <select
                   value={assignClientId}
                   onChange={(e) => setAssignClientId(e.target.value)}
                   className="flex h-9 flex-1 rounded-md border border-input bg-background px-3 py-1 text-sm"
                 >
-                  <option value="">Select client…</option>
+                  <option value="">{t("users.selectClientToAssign")}</option>
                   {unassignedClients.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.fullName} ({c.email})
@@ -663,7 +668,7 @@ function ManageClientsDialog({
                   disabled={!assignClientId || assignMutation.isPending}
                   onClick={handleAssign}
                 >
-                  Assign
+                  {t("users.assign")}
                 </Button>
               </div>
             </div>
@@ -673,14 +678,14 @@ function ManageClientsDialog({
         <AlertDialog open={!!removeClient} onOpenChange={(o) => !o && setRemoveClient(null)}>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Remove client</AlertDialogTitle>
-              <AlertDialogDescription>
-                Remove {removeClient?.fullName} from this agent&apos;s assignments?
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction onClick={handleRemove}>Remove</AlertDialogAction>
+            <AlertDialogTitle>{t("users.removeClientTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("users.removeClientDesc", { name: removeClient?.fullName ?? "" })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+            <AlertDialogAction onClick={handleRemove}>{t("common.remove")}</AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>

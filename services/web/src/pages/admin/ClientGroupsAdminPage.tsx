@@ -17,6 +17,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -29,6 +30,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { ApiError } from "@/api/client";
 import type { ClientGroup } from "@/types/admin";
+import { useTranslation } from "@/i18n/useTranslation";
 
 function formatDiscount(group: ClientGroup): string {
   if (group.discountType === "percentage") {
@@ -43,6 +45,7 @@ function formatDiscount(group: ClientGroup): string {
 }
 
 export function ClientGroupsAdminPage() {
+  const { t } = useTranslation();
   const { role } = useAuth();
   const [page, setPage] = useState(1);
   const [createOpen, setCreateOpen] = useState(false);
@@ -69,11 +72,11 @@ export function ClientGroupsAdminPage() {
     try {
       await createMutation.mutateAsync({ name, discountType, discountValue });
       setCreateOpen(false);
-      toast.success("Client group created");
+      toast.success(t("clientGroups.created"));
       void refetch();
     } catch (err) {
       if (err instanceof ApiError) toast.error(err.message);
-      else toast.error("Failed to create");
+      else toast.error(t("errors.failedToCreate"));
     }
   };
 
@@ -88,11 +91,11 @@ export function ClientGroupsAdminPage() {
     try {
       await updateMutation.mutateAsync({ name, discountType, discountValue });
       setEditGroup(null);
-      toast.success("Client group updated");
+      toast.success(t("clientGroups.updated"));
       void refetch();
     } catch (err) {
       if (err instanceof ApiError) toast.error(err.message);
-      else toast.error("Failed to update");
+      else toast.error(t("errors.failedToUpdate"));
     }
   };
 
@@ -101,19 +104,17 @@ export function ClientGroupsAdminPage() {
     try {
       await deleteMutation.mutateAsync(deleteGroup.id);
       setDeleteGroup(null);
-      toast.success("Client group deleted");
+      toast.success(t("clientGroups.deleted"));
       void refetch();
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.status === 409) {
-          toast.error(
-            "Cannot delete — clients are assigned to this group. Reassign or remove clients first."
-          );
+          toast.error(t("errors.cannotDeleteGroupWithClients"));
         } else {
           toast.error(err.message);
         }
       } else {
-        toast.error("Failed to delete");
+        toast.error(t("errors.failedToDelete"));
       }
     }
   };
@@ -121,39 +122,51 @@ export function ClientGroupsAdminPage() {
   if (isError) {
     return (
       <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-destructive">
-        {error instanceof Error ? error.message : "Failed to load client groups."}
+        {error instanceof Error ? error.message : t("errors.failedToLoadClientGroups")}
       </div>
     );
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <h1 className="text-2xl font-semibold">Client Groups</h1>
+    <div className="flex flex-col gap-4 md:gap-6">
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-2xl font-bold tracking-tight">{t("pages.clientGroups.title")}</h2>
+          <p className="text-muted-foreground text-sm">{t("pages.clientGroups.description")}</p>
+        </div>
         {canMutate && (
-          <Button onClick={() => setCreateOpen(true)}>Create Group</Button>
+          <Button onClick={() => setCreateOpen(true)}>{t("clientGroups.createGroup")}</Button>
         )}
       </div>
 
       {isLoading ? (
-        <div className="rounded-lg border p-4 text-muted-foreground">
-          Loading…
+        <div className="rounded-lg border bg-card p-6">
+          <div className="space-y-3">
+            <Skeleton className="h-8 w-48" />
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+          </div>
         </div>
       ) : !data?.data.length ? (
-        <div className="rounded-lg border bg-muted/50 p-8 text-center text-muted-foreground">
-          No client groups.
+        <div className="rounded-lg border bg-card py-12">
+          <div className="flex flex-col items-center justify-center text-center">
+            <p className="text-lg font-semibold">{t("pages.clientGroups.empty")}</p>
+            <p className="mt-1 text-sm text-muted-foreground">{t("pages.clientGroups.emptyHint")}</p>
+          </div>
         </div>
       ) : (
         <>
-          <div className="overflow-x-auto rounded-lg border">
-            <table className="w-full text-sm">
+          <div className="rounded-lg border bg-card">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[400px] text-sm">
               <thead>
                 <tr className="border-b bg-muted/50">
-                  <th className="px-4 py-2 text-left font-medium">Name</th>
-                  <th className="px-4 py-2 text-left font-medium">Discount type</th>
-                  <th className="px-4 py-2 text-left font-medium">Discount value</th>
+                  <th className="px-4 py-2 text-left font-medium">{t("table.name")}</th>
+                  <th className="px-4 py-2 text-left font-medium">{t("table.discountType")}</th>
+                  <th className="px-4 py-2 text-left font-medium">{t("table.discountValue")}</th>
                   {canMutate && (
-                    <th className="px-4 py-2 text-right font-medium">Actions</th>
+                    <th className="px-4 py-2 text-right font-medium">{t("table.actions")}</th>
                   )}
                 </tr>
               </thead>
@@ -165,7 +178,7 @@ export function ClientGroupsAdminPage() {
                       <span
                         className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${g.discountType === "percentage" ? "bg-blue-500/20 text-blue-700 dark:text-blue-300" : "bg-green-500/20 text-green-700 dark:text-green-300"}`}
                       >
-                        {g.discountType}
+                        {g.discountType === "percentage" ? t("clientGroups.discountPercentage") : t("clientGroups.discountFixed")}
                       </span>
                     </td>
                     <td className="px-4 py-2">{formatDiscount(g)}</td>
@@ -176,7 +189,7 @@ export function ClientGroupsAdminPage() {
                           size="sm"
                           onClick={() => setEditGroup(g)}
                         >
-                          Edit
+                          {t("common.edit")}
                         </Button>
                         <Button
                           variant="ghost"
@@ -184,7 +197,7 @@ export function ClientGroupsAdminPage() {
                           className="text-destructive hover:text-destructive"
                           onClick={() => setDeleteGroup(g)}
                         >
-                          Delete
+                          {t("common.delete")}
                         </Button>
                       </td>
                     )}
@@ -192,6 +205,7 @@ export function ClientGroupsAdminPage() {
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
 
           {data.pagination.totalPages > 1 && (
@@ -202,10 +216,10 @@ export function ClientGroupsAdminPage() {
                 disabled={page <= 1}
                 onClick={() => setPage((p) => p - 1)}
               >
-                Previous
+                {t("common.previous")}
               </Button>
               <span className="text-sm text-muted-foreground">
-                Page {data.pagination.page} of {data.pagination.totalPages}
+                {t("common.pageOf", { page: data.pagination.page, total: data.pagination.totalPages })}
               </span>
               <Button
                 variant="outline"
@@ -213,7 +227,7 @@ export function ClientGroupsAdminPage() {
                 disabled={page >= data.pagination.totalPages}
                 onClick={() => setPage((p) => p + 1)}
               >
-                Next
+                {t("common.next")}
               </Button>
             </div>
           )}
@@ -224,11 +238,11 @@ export function ClientGroupsAdminPage() {
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Create Client Group</DialogTitle>
+            <DialogTitle>{t("clientGroups.createTitle")}</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleCreateSubmit} className="space-y-4">
             <div>
-              <Label htmlFor="create-name">Name</Label>
+              <Label htmlFor="create-name">{t("table.name")}</Label>
               <Input
                 id="create-name"
                 name="name"
@@ -237,18 +251,18 @@ export function ClientGroupsAdminPage() {
               />
             </div>
             <div>
-              <Label htmlFor="create-discountType">Discount type</Label>
+              <Label htmlFor="create-discountType">{t("table.discountType")}</Label>
               <select
                 id="create-discountType"
                 name="discountType"
                 className="mt-1 flex h-9 w-full rounded-md border border-input bg-background px-3 py-1"
               >
-                <option value="fixed">Fixed</option>
-                <option value="percentage">Percentage</option>
+                <option value="fixed">{t("clientGroups.discountFixed")}</option>
+                <option value="percentage">{t("clientGroups.discountPercentage")}</option>
               </select>
             </div>
             <div>
-              <Label htmlFor="create-discountValue">Discount value</Label>
+              <Label htmlFor="create-discountValue">{t("table.discountValue")}</Label>
               <Input
                 id="create-discountValue"
                 name="discountValue"
@@ -261,10 +275,10 @@ export function ClientGroupsAdminPage() {
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>
-                Cancel
+                {t("common.cancel")}
               </Button>
               <Button type="submit" disabled={createMutation.isPending}>
-                Create
+                {t("common.create")}
               </Button>
             </DialogFooter>
           </form>
@@ -275,12 +289,12 @@ export function ClientGroupsAdminPage() {
       <Dialog open={!!editGroup} onOpenChange={(o) => !o && setEditGroup(null)}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Edit Client Group</DialogTitle>
+            <DialogTitle>{t("clientGroups.editTitle")}</DialogTitle>
           </DialogHeader>
           {editGroup && (
             <form onSubmit={handleEditSubmit} className="space-y-4">
               <div>
-                <Label htmlFor="edit-name">Name</Label>
+                <Label htmlFor="edit-name">{t("table.name")}</Label>
                 <Input
                   id="edit-name"
                   name="name"
@@ -290,19 +304,19 @@ export function ClientGroupsAdminPage() {
                 />
               </div>
               <div>
-                <Label htmlFor="edit-discountType">Discount type</Label>
+                <Label htmlFor="edit-discountType">{t("table.discountType")}</Label>
                 <select
                   id="edit-discountType"
                   name="discountType"
                   defaultValue={editGroup.discountType}
                   className="mt-1 flex h-9 w-full rounded-md border border-input bg-background px-3 py-1"
                 >
-                  <option value="fixed">Fixed</option>
-                  <option value="percentage">Percentage</option>
+                  <option value="fixed">{t("clientGroups.discountFixed")}</option>
+                  <option value="percentage">{t("clientGroups.discountPercentage")}</option>
                 </select>
               </div>
               <div>
-                <Label htmlFor="edit-discountValue">Discount value</Label>
+                <Label htmlFor="edit-discountValue">{t("table.discountValue")}</Label>
                 <Input
                   id="edit-discountValue"
                   name="discountValue"
@@ -315,15 +329,14 @@ export function ClientGroupsAdminPage() {
                 />
               </div>
               <p className="text-muted-foreground text-sm">
-                Changes affect new orders and draft orders on next submission. Approved
-                and fulfilled orders are not affected.
+                {t("clientGroups.changesHint")}
               </p>
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setEditGroup(null)}>
-                  Cancel
+                  {t("common.cancel")}
                 </Button>
                 <Button type="submit" disabled={updateMutation.isPending}>
-                  Save
+                  {t("common.save")}
                 </Button>
               </DialogFooter>
             </form>
@@ -335,18 +348,18 @@ export function ClientGroupsAdminPage() {
       <AlertDialog open={!!deleteGroup} onOpenChange={(o) => !o && setDeleteGroup(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete group</AlertDialogTitle>
+            <AlertDialogTitle>{t("clientGroups.deleteTitle")}</AlertDialogTitle>
             <AlertDialogDescription>
-              Delete group &quot;{deleteGroup?.name}&quot;?
+              {t("clientGroups.deleteDesc", { name: deleteGroup?.name ?? "" })}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDelete}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              Delete
+              {t("common.delete")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

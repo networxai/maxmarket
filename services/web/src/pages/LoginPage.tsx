@@ -58,13 +58,13 @@ export function LoginPage() {
   if (isAuthenticated) return null;
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-muted/30 p-4">
-      <Card className="w-full max-w-sm">
-        <CardHeader>
-          <CardTitle>MaxMarket</CardTitle>
+    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-background via-muted/30 to-muted/50 p-4">
+      <Card className="w-full max-w-sm border shadow-lg">
+        <CardHeader className="space-y-1 text-center">
+          <CardTitle className="text-2xl font-bold">{t("nav.appName")}</CardTitle>
           <CardDescription>{t("auth.signInDescription")}</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="pt-2">
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email">{t("auth.email")}</Label>
@@ -74,7 +74,7 @@ export function LoginPage() {
                 type="email"
                 autoComplete="email"
                 required
-                placeholder="you@example.com"
+                placeholder={t("auth.emailPlaceholder")}
                 disabled={loginMutation.isPending}
               />
             </div>

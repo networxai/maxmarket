@@ -7,8 +7,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { formatDateTime } from "@/lib/format-date";
 import { formatPrice } from "@/lib/format-currency";
+import { useTranslation } from "@/i18n/useTranslation";
 
 export function OrderVersionsPage() {
+  const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const [selectedVersion, setSelectedVersion] = useState<number | null>(null);
 
@@ -27,19 +29,19 @@ export function OrderVersionsPage() {
     <div className="space-y-4">
       <div className="flex items-center gap-2">
         <Button variant="ghost" size="sm" asChild>
-          <Link to={`/orders/${id}`}>← Order {order.orderNumber}</Link>
+          <Link to={`/orders/${id}`}>{t("orderVersions.backToOrder", { number: order.orderNumber })}</Link>
         </Button>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Version history</CardTitle>
+          <CardTitle>{t("orderVersions.title")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           {versionsLoading ? (
             <Skeleton className="h-32 w-full" />
           ) : versions.length === 0 ? (
-            <p className="text-muted-foreground text-sm">No version history.</p>
+            <p className="text-muted-foreground text-sm">{t("orderVersions.empty")}</p>
           ) : (
             <div className="space-y-2">
               {versions.map((v) => (
@@ -51,7 +53,7 @@ export function OrderVersionsPage() {
                   )}
                 >
                   <div>
-                    <span className="font-medium">Version {v.versionNumber}</span>
+                    <span className="font-medium">{t("orderVersions.versionNumber", { number: String(v.versionNumber) })}</span>
                     <span className="text-muted-foreground text-sm"> · {v.diffSummary}</span>
                     <p className="text-muted-foreground text-xs">
                       {formatDateTime(v.createdAt)} · by {v.createdByUserId}
@@ -62,7 +64,7 @@ export function OrderVersionsPage() {
                     size="sm"
                     onClick={() => setSelectedVersion(selectedVersion === v.versionNumber ? null : v.versionNumber)}
                   >
-                    {selectedVersion === v.versionNumber ? "Hide" : "View"}
+                    {selectedVersion === v.versionNumber ? t("common.hide") : t("common.view")}
                   </Button>
                 </div>
               ))}
@@ -71,17 +73,17 @@ export function OrderVersionsPage() {
 
           {selectedVersion != null && versionDetail && (
             <div className="mt-4 rounded border p-4">
-              <h3 className="font-medium">Version {versionDetail.versionNumber} snapshot</h3>
+              <h3 className="font-medium">{t("orderVersions.snapshotTitle", { number: String(versionDetail.versionNumber) })}</h3>
               <p className="text-muted-foreground text-sm">
                 {formatDateTime(versionDetail.createdAt)} · by {versionDetail.createdByUserId}
               </p>
               <div className="mt-2 overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="w-full min-w-[300px] text-sm">
                   <thead>
                     <tr className="border-b">
-                      <th className="px-2 py-1 text-left">SKU</th>
-                      <th className="px-2 py-1 text-right">Qty</th>
-                      <th className="px-2 py-1 text-right">Final Price</th>
+                    <th className="px-2 py-1 text-left">{t("table.sku")}</th>
+                    <th className="px-2 py-1 text-right">{t("table.qty")}</th>
+                    <th className="px-2 py-1 text-right">{t("table.finalPrice")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -97,7 +99,7 @@ export function OrderVersionsPage() {
               </div>
               {versionDetail.diff.length > 0 && (
                 <div className="mt-4">
-                  <h4 className="text-sm font-medium">Changes</h4>
+                  <h4 className="text-sm font-medium">{t("orderVersions.changesTitle")}</h4>
                   <ul className="mt-1 list-inside list-disc text-sm">
                     {versionDetail.diff.map((d, i) => (
                       <li key={i}>

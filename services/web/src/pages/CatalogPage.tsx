@@ -54,8 +54,8 @@ export function CatalogPage() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-4">
+    <div className="flex flex-col gap-4 md:gap-6">
+      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
         <Input
           placeholder={t("catalog.search")}
           value={search}
@@ -63,7 +63,7 @@ export function CatalogPage() {
             setSearch(e.target.value);
             setPage(1);
           }}
-          className="max-w-xs"
+          className="w-full sm:max-w-xs"
         />
         <select
           value={category}
@@ -71,7 +71,7 @@ export function CatalogPage() {
             setCategory(e.target.value);
             setPage(1);
           }}
-          className="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm"
+          className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm sm:w-auto"
           disabled={categoriesLoading}
         >
           <option value="">All categories</option>
@@ -84,9 +84,9 @@ export function CatalogPage() {
       </div>
 
       {isLoading ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3">
           {Array.from({ length: 6 }).map((_, i) => (
-            <Card key={i} className="overflow-hidden">
+            <Card key={i} className="overflow-hidden transition-shadow hover:shadow-md">
               <Skeleton className="aspect-square w-full" />
               <CardHeader>
                 <Skeleton className="h-5 w-3/4" />
@@ -99,14 +99,16 @@ export function CatalogPage() {
           ))}
         </div>
       ) : !productsData?.data.length ? (
-        <div className="rounded-lg border bg-muted/50 p-8 text-center text-muted-foreground">
-          {t("catalog.noProducts")}
+        <div className="rounded-lg border bg-card py-12">
+          <div className="flex flex-col items-center justify-center text-center">
+            <p className="text-lg font-semibold">{t("catalog.noProducts")}</p>
+          </div>
         </div>
       ) : (
         <>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3">
             {productsData.data.map((product: ProductListItem) => (
-              <Card key={product.id} className="flex flex-col overflow-hidden">
+              <Card key={product.id} className="flex flex-col overflow-hidden transition-shadow hover:shadow-md">
                 <div className="aspect-square w-full shrink-0 overflow-hidden bg-muted">
                   {(() => {
                     const firstImage = getFirstProductImage(product);
@@ -114,7 +116,7 @@ export function CatalogPage() {
                     <img
                       src={firstImage.url}
                       alt={product.name}
-                      className="h-full w-full object-cover"
+                      className="h-full w-full object-cover transition-transform hover:scale-105"
                       loading="lazy"
                     />
                   ) : (
